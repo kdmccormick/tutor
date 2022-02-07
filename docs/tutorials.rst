@@ -7,6 +7,7 @@ Open edX customization
 .. toctree::
    :maxdepth: 2
 
+   tutorials/plugin
    tutorials/theming
    tutorials/edx-platform-settings
    tutorials/google-smtp

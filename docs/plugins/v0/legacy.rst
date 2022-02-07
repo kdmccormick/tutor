@@ -1,0 +1,1 @@
+.. warning:: The v0 plugin API is no longer the recommended way of developing plugins for Tutor, starting from Tutor v13.2.0. See our new :ref:`plugin creation tutorial <plugin_development_tutorial>` to learn more about the new v1 plugin API.
