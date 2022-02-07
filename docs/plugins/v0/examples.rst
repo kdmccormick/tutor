@@ -3,6 +3,8 @@
 Examples of Tutor plugins
 =========================
 
+.. include:: legacy.rst
+
 The following are simple examples of :ref:`Tutor plugins <plugins>` that can be used to modify the behaviour of Open edX.
 
 Skip email validation for new users
