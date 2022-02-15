@@ -19,7 +19,10 @@ x-openedx-service:
     - ../build/openedx/themes:/openedx/themes
     # editable requirements
     - ../build/openedx/requirements:/openedx/requirements
-
+    # optional edx-platform repo bind-mounted from host
+    {% if OPENEDX_MOUNT_REPOSITORY %}
+    - ${{ OPENEDX_MOUNT_REPOSITORY }}:/openedx/edx-platform
+    {% endif %}
 services:
   lms-permissions:
     command: ["{{ HOST_USER_ID }}", "/openedx/data", "/openedx/media"]
