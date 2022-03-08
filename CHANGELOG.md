@@ -4,6 +4,8 @@ Note: Breaking changes between versions are indicated by "💥".
 
 ## Unreleased
 
+- [Improvement] `tutor dev start` will now stop containers started by `tutor local start` and vice versa, preventing Tutor users from accidentally running `local` and `dev` containers at the same time.
+
 ## v13.1.8 (2022-03-18)
 
 - [Bugfix] Fix "evalsymlink failure" during `k8s quickstart` (#611).

@@ -33,6 +33,9 @@ class LocalJobRunner(compose.ComposeJobRunner):
 class LocalContext(compose.BaseComposeContext):
     def job_runner(self, config: Config) -> LocalJobRunner:
         return LocalJobRunner(self.root, config)
+    def get_other_compose_context(self) -> 'BaseComposeContext':
+        from .dev import DevContext
+        return DevContext(self.root)
 
 
 @click.group(help="Run Open edX locally with docker-compose")
@@ -46,6 +49,8 @@ def local(context: click.Context) -> None:
 @click.option("-p", "--pullimages", is_flag=True, help="Update docker images")
 @click.pass_context
 def quickstart(context: click.Context, non_interactive: bool, pullimages: bool) -> None:
+    # Stop 'local' if starting in 'dev', or vice versa
+
     try:
         utils.check_macos_docker_memory()
     except exceptions.TutorError as e:
@@ -102,6 +107,7 @@ Press enter when you are ready to continue"""
         )
 
     click.echo(fmt.title("Stopping any existing platform"))
+    context.get_other_compose_context().job_runner(config).docker_compose("down")
     context.invoke(compose.stop)
     if pullimages:
         click.echo(fmt.title("Docker image updates"))

@@ -58,6 +58,13 @@ class ComposeJobRunner(jobs.BaseComposeJobRunner):
 class BaseComposeContext(BaseJobContext):
     def job_runner(self, config: Config) -> ComposeJobRunner:
         raise NotImplementedError
+    def get_other_compose_context(self) -> 'BaseComposeContext':
+        """
+        Get a BaseComposeContext for the *other* compose mode.
+
+        Specifically, a DevContext should return a LocalContext, and vice versa.
+        """
+        raise NotImplementedError
 
 
 @click.command(
@@ -71,14 +78,18 @@ class BaseComposeContext(BaseJobContext):
 def start(
     context: BaseComposeContext, skip_build: bool, detach: bool, services: List[str]
 ) -> None:
+    config = tutor_config.load(context.root)
+
     command = ["up", "--remove-orphans"]
     if not skip_build:
         command.append("--build")
     if detach:
         command.append("-d")
 
+    # Stop 'local' if starting in 'dev', or vice versa
+    context.get_other_compose_context().job_runner(config).docker_compose("down")
+
     # Start services
-    config = tutor_config.load(context.root)
     context.job_runner(config).docker_compose(*command, *services)
 
 
