@@ -54,13 +54,13 @@ class BasePlugin:
 
     def _install(self) -> None:
         # Add itself to the list of installed plugins
-        hooks.filters.add_item(hooks.Filters.PLUGINS_INSTALLED, self.name)
+        hooks.Filters.PLUGINS_INSTALLED.add_item(self.name)
 
         # Add plugin version
-        hooks.filters.add_item(hooks.Filters.PLUGINS_INFO, (self.name, self._version()))
+        hooks.Filters.PLUGINS_INFO.add_item((self.name, self._version()))
 
         # Create actions and filters on enable
-        hooks.actions.on(hooks.Actions.ENABLE_PLUGIN.format(self.name))(self.__enable)
+        hooks.Actions.ENABLE_PLUGIN(self.name).handle()(self.__enable)
 
     def __enable(self) -> None:
         """
@@ -78,7 +78,7 @@ class BasePlugin:
         self._load_templates_root()
         self._load_command()
         # Add self to enabled plugins
-        hooks.filters.add_item(hooks.Filters.PLUGINS_ENABLED, self.name)
+        hooks.Filters.PLUGINS_ENABLED.add_item(self.name)
 
     def _load_obj(self) -> None:
         """
@@ -114,22 +114,19 @@ class BasePlugin:
         # the plugin name, in uppercase.
         key_prefix = self.name.upper() + "_"
 
-        hooks.filters.add_items(
-            hooks.Filters.CONFIG_BASE,
+        hooks.Filters.CONFIG_BASE.add_items(
             [
                 (f"{key_prefix}{key}", value)
                 for key, value in config.get("add", {}).items()
             ],
         )
-        hooks.filters.add_items(
-            hooks.Filters.CONFIG_DEFAULTS,
+        hooks.Filters.CONFIG_DEFAULTS.add_items(
             [
                 (f"{key_prefix}{key}", value)
                 for key, value in config.get("defaults", {}).items()
             ],
         )
-        hooks.filters.add_items(
-            hooks.Filters.CONFIG_OVERRIDES,
+        hooks.Filters.CONFIG_OVERRIDES.add_items(
             [(key, value) for key, value in config.get("set", {}).items()],
         )
 
@@ -151,7 +148,7 @@ class BasePlugin:
                 raise exceptions.TutorError(
                     f"Invalid patch '{patch_name}' in plugin {self.name}. Expected str, got {content.__class__}."
                 )
-            hooks.filters.add_item(hooks.Filters.ENV_PATCH.format(patch_name), content)
+            hooks.Filters.ENV_PATCH(patch_name).add_item(content)
 
     def _load_tasks(self) -> None:
         """
@@ -171,28 +168,21 @@ class BasePlugin:
         # Build images: hooks = {"build-image": {"myimage": "myimage:latest"}}
         # We assume that the dockerfile is in the build/myimage folder.
         for img, tag in build_image_tasks.items():
-            hooks.filters.add_item(
-                hooks.Filters.APP_TASK_IMAGES_BUILD,
+            hooks.Filters.APP_TASK_IMAGES_BUILD.add_item(
                 (img, ("plugins", self.name, "build", img), tag, []),
             )
         # Remote images: hooks = {"remote-image": {"myimage": "myimage:latest"}}
         for img, tag in remote_image_tasks.items():
-            hooks.filters.add_item(
-                hooks.Filters.APP_TASK_IMAGES_PULL,
-                (img, tag),
-            )
-            hooks.filters.add_item(
-                hooks.Filters.APP_TASK_IMAGES_PUSH,
-                (img, tag),
-            )
+            hooks.Filters.APP_TASK_IMAGES_PULL.add_item((img, tag))
+            hooks.Filters.APP_TASK_IMAGES_PUSH.add_item((img, tag))
         # Pre-init scripts: hooks = {"pre-init": ["myservice1", "myservice2"]}
         for service in pre_init_tasks:
             path = (self.name, "hooks", service, "pre-init")
-            hooks.filters.add_item(hooks.Filters.APP_TASK_PRE_INIT, (service, path))
+            hooks.Filters.APP_TASK_PRE_INIT.add_item((service, path))
         # Init scripts: hooks = {"init": ["myservice1", "myservice2"]}
         for service in init_tasks:
             path = (self.name, "hooks", service, "init")
-            hooks.filters.add_item(hooks.Filters.APP_TASK_INIT, (service, path))
+            hooks.Filters.APP_TASK_INIT.add_item((service, path))
 
     def _load_templates_root(self) -> None:
         templates_root = get_callable_attr(self.obj, "templates", default=None)
@@ -203,11 +193,10 @@ class BasePlugin:
                 f"Invalid templates in plugin {self.name}. Expected str, got {templates_root.__class__}."
             )
 
-        hooks.filters.add_item(hooks.Filters.ENV_TEMPLATE_ROOTS, templates_root)
+        hooks.Filters.ENV_TEMPLATE_ROOTS.add_item(templates_root)
         # We only add the "apps" and "build" folders and we render them in the
         # "plugins/<plugin name>" folder.
-        hooks.filters.add_items(
-            "env:templates:targets",
+        hooks.Filter("env:templates:targets").add_items(
             [
                 (
                     os.path.join(self.name, "apps"),
@@ -230,7 +219,7 @@ class BasePlugin:
             )
         # We force the command name to the plugin name
         command.name = self.name
-        hooks.filters.add_item(hooks.Filters.CLI_COMMANDS, command)
+        hooks.Filters.CLI_COMMANDS.add_item(command)
 
     def _version(self) -> t.Optional[str]:
         return None
@@ -366,7 +355,7 @@ class DictPlugin(BasePlugin):
                     )
 
 
-@hooks.actions.on(hooks.Actions.INSTALL_PLUGINS)
+@hooks.Actions.INSTALL_PLUGINS.handle()
 def _install_v0_plugins() -> None:
     """
     Install all entrypoint and dict plugins.
@@ -382,10 +371,10 @@ def _install_v0_plugins() -> None:
     environment variables.
     """
     if "TUTOR_IGNORE_ENTRYPOINT_PLUGINS" not in os.environ:
-        with hooks.contexts.enter(hooks.Contexts.PLUGINS_V0_ENTRYPOINT):
+        with hooks.enter_context(hooks.Contexts.PLUGINS_V0_ENTRYPOINT):
             EntrypointPlugin.install_all()
     if "TUTOR_IGNORE_DICT_PLUGINS" not in os.environ:
-        with hooks.contexts.enter(hooks.Contexts.PLUGINS_V0_YAML):
+        with hooks.enter_context(hooks.Contexts.PLUGINS_V0_YAML):
             DictPlugin.install_all()
 
 

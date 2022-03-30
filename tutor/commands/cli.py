@@ -15,7 +15,7 @@ from tutor.commands.local import local
 from tutor.commands.plugins import plugins_command
 
 # Everyone on board
-hooks.actions.do(hooks.Actions.CORE_READY)
+hooks.Actions.CORE_READY.fire()
 
 
 def main() -> None:
@@ -45,7 +45,7 @@ class TutorCli(click.MultiCommand):
         Return the list of subcommands (click.Command).
         """
         cls.ensure_plugins_enabled(ctx)
-        return hooks.filters.apply(hooks.Filters.CLI_COMMANDS, [])
+        return hooks.Filters.CLI_COMMANDS.apply([])
 
     @classmethod
     def ensure_plugins_enabled(cls, ctx: click.Context) -> None:
@@ -59,7 +59,7 @@ class TutorCli(click.MultiCommand):
             # https://github.com/click-contrib/sphinx-click/issues/70
             return
         if not cls.IS_ROOT_READY:
-            hooks.actions.do(hooks.Actions.CORE_ROOT_READY, ctx.params["root"])
+            hooks.Actions.CORE_ROOT_READY.fire(root=ctx.params["root"])
             cls.IS_ROOT_READY = True
 
     def list_commands(self, ctx: click.Context) -> List[str]:
@@ -124,8 +124,7 @@ def help_command(context: click.Context) -> None:
     context.invoke(cli, show_help=True)
 
 
-hooks.filters.add_items(
-    "cli:commands",
+hooks.Filter("cli:commands").add_items(
     [
         images_command,
         config_command,

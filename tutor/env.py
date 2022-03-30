@@ -20,8 +20,7 @@ def _prepare_environment() -> None:
     Prepare environment by adding core data to filters.
     """
     # Core template targets
-    hooks.filters.add_items(
-        hooks.Filters.ENV_TEMPLATE_TARGETS,
+    hooks.Filters.ENV_TEMPLATE_TARGETS.add_items(
         [
             ("apps/", ""),
             ("build/", ""),
@@ -33,8 +32,7 @@ def _prepare_environment() -> None:
         ],
     )
     # Template filters
-    hooks.filters.add_items(
-        hooks.Filters.ENV_TEMPLATE_FILTERS,
+    hooks.Filters.ENV_TEMPLATE_FILTERS.add_items(
         [
             ("common_domain", utils.common_domain),
             ("encrypt", utils.encrypt),
@@ -46,8 +44,7 @@ def _prepare_environment() -> None:
         ],
     )
     # Template variables
-    hooks.filters.add_items(
-        hooks.Filters.ENV_TEMPLATE_VARIABLES,
+    hooks.Filters.ENV_TEMPLATE_VARIABLES.add_items(
         [
             ("rsa_import_key", utils.rsa_import_key),
             ("HOST_USER_ID", utils.get_user_id()),
@@ -73,9 +70,7 @@ class Renderer:
     def instance(cls: t.Type["Renderer"], config: Config) -> "Renderer":
         # Load template roots: these are required to be able to use
         # {% include .. %} directives
-        template_roots = hooks.filters.apply(
-            hooks.Filters.ENV_TEMPLATE_ROOTS, [TEMPLATES_ROOT]
-        )
+        template_roots = hooks.Filters.ENV_TEMPLATE_ROOTS.apply([TEMPLATES_ROOT])
         return cls(config, template_roots, ignore_folders=["partials"])
 
     def __init__(
@@ -93,9 +88,9 @@ class Renderer:
         self.environment = JinjaEnvironment(template_roots)
 
         # Filters
-        plugin_filters: t.Iterator[t.Tuple[str, JinjaFilter]] = hooks.filters.iterate(
-            hooks.Filters.ENV_TEMPLATE_FILTERS
-        )
+        plugin_filters: t.Iterator[
+            t.Tuple[str, JinjaFilter]
+        ] = hooks.Filters.ENV_TEMPLATE_FILTERS.iterate()
         for name, func in plugin_filters:
             if name in self.environment.filters:
                 fmt.echo_alert(f"Found conflicting template filters named '{name}'")
@@ -103,9 +98,9 @@ class Renderer:
         self.environment.filters["walk_templates"] = self.walk_templates
 
         # Globals
-        plugin_globals: t.Iterator[t.Tuple[str, JinjaFilter]] = hooks.filters.iterate(
-            hooks.Filters.ENV_TEMPLATE_VARIABLES
-        )
+        plugin_globals: t.Iterator[
+            t.Tuple[str, JinjaFilter]
+        ] = hooks.Filters.ENV_TEMPLATE_VARIABLES.iterate()
         for name, value in plugin_globals:
             if name in self.environment.globals:
                 fmt.echo_alert(f"Found conflicting template variables named '{name}'")
@@ -247,9 +242,9 @@ def save(root: str, config: Config) -> None:
     Save the full environment, including version information.
     """
     root_env = pathjoin(root)
-    targets: t.Iterator[t.Tuple[str, str]] = hooks.filters.iterate(
-        hooks.Filters.ENV_TEMPLATE_TARGETS
-    )
+    targets: t.Iterator[
+        t.Tuple[str, str]
+    ] = hooks.Filters.ENV_TEMPLATE_TARGETS.iterate()
     for src, dst in targets:
         save_all_from(src, os.path.join(root_env, dst), config)
 

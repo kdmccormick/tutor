@@ -109,8 +109,8 @@ def get_base() -> Config:
     """
     base = get_template("base.yml")
     extra_base: t.List[t.Tuple[str, ConfigValue]] = []
-    extra_base = hooks.filters.apply(hooks.Filters.CONFIG_BASE, extra_base)
-    extra_base = hooks.filters.apply(hooks.Filters.CONFIG_OVERRIDES, extra_base)
+    extra_base = hooks.Filters.CONFIG_BASE.apply(extra_base)
+    extra_base = hooks.Filters.CONFIG_OVERRIDES.apply(extra_base)
     for name, value in extra_base:
         if name in base:
             fmt.echo_alert(
@@ -127,9 +127,9 @@ def get_defaults() -> Config:
     Entries in this configuration are unrendered.
     """
     defaults = get_template("defaults.yml")
-    extra_defaults: t.Iterator[t.Tuple[str, ConfigValue]] = hooks.filters.iterate(
-        hooks.Filters.CONFIG_DEFAULTS
-    )
+    extra_defaults: t.Iterator[
+        t.Tuple[str, ConfigValue]
+    ] = hooks.Filters.CONFIG_DEFAULTS.iterate()
     for name, value in extra_defaults:
         defaults[name] = value
     update_with_env(defaults)
@@ -293,10 +293,10 @@ def save_enabled_plugins(config: Config) -> None:
 def disable_plugin(config: Config, plugin: str) -> None:
     # Find the configuration entries that were overridden by the plugin and
     # remove them from the current config
-    plugin_context = hooks.Contexts.APP.format(plugin)
+    plugin_context = hooks.Contexts.APP(plugin)
     overriden_config_items: t.Iterator[
         t.Tuple[str, ConfigValue]
-    ] = hooks.filters.iterate(hooks.Filters.CONFIG_OVERRIDES, context=plugin_context)
+    ] = hooks.Filters.CONFIG_OVERRIDES.iterate(context=plugin_context)
     for key, _value in overriden_config_items:
         value = config.pop(key, None)
         value = env.render_unknown(config, value)
@@ -307,7 +307,7 @@ def disable_plugin(config: Config, plugin: str) -> None:
     save_enabled_plugins(config)
 
 
-@hooks.actions.on(hooks.Actions.CORE_ROOT_READY, priority=20)
+@hooks.Actions.CORE_ROOT_READY.handle(priority=20)
 def _enable_plugins(root: str) -> None:
     """
     Plugins must be enabled after they are installed, hence the higher priority

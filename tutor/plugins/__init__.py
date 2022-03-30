@@ -12,7 +12,7 @@ from . import v0
 from . import v1
 
 
-@hooks.actions.on(hooks.Actions.CORE_READY)
+@hooks.Actions.CORE_READY.handle()
 def _install() -> None:
     """
     Find all installed plugins.
@@ -21,12 +21,12 @@ def _install() -> None:
     installed within a context, such that they can easily be disabled later, for
     instance in tests.
     """
-    with hooks.contexts.enter(hooks.Contexts.PLUGINS):
-        hooks.actions.do(hooks.Actions.INSTALL_PLUGINS)
+    with hooks.enter_context(hooks.Contexts.PLUGINS):
+        hooks.Actions.INSTALL_PLUGINS.fire()
 
 
-@hooks.actions.on(hooks.Actions.CORE_ROOT_READY, priority=50)
-def _install_plugin_patches(_root: str) -> None:
+@hooks.Actions.CORE_ROOT_READY.handle(priority=50)
+def _install_plugin_patches(root: str) -> None:  # pylint: disable=unused-argument
     """
     Some patches are added as (name, content) tuples with the ENV_PATCHES
     filter. We convert these patches to add them to ENV_PATCH. This makes it
@@ -34,11 +34,9 @@ def _install_plugin_patches(_root: str) -> None:
 
     This action is run after plugins have been enabled.
     """
-    patches: t.Iterable[t.Tuple[str, str]] = hooks.filters.iterate(
-        hooks.Filters.ENV_PATCHES
-    )
+    patches: t.Iterable[t.Tuple[str, str]] = hooks.Filters.ENV_PATCHES.iterate()
     for name, content in patches:
-        hooks.filters.add_item(hooks.Filters.ENV_PATCH.format(name), content)
+        hooks.Filters.ENV_PATCH(name).add_item(content)
 
 
 def is_installed(name: str) -> bool:
@@ -57,7 +55,7 @@ def iter_installed() -> t.Iterator[str]:
 
     This will yield all plugins, including those that have the same name.
     """
-    plugins: t.Iterator[str] = hooks.filters.iterate(hooks.Filters.PLUGINS_INSTALLED)
+    plugins: t.Iterator[str] = hooks.Filters.PLUGINS_INSTALLED.iterate()
     yield from sorted(plugins)
 
 
@@ -67,9 +65,9 @@ def iter_info() -> t.Iterator[t.Tuple[str, t.Optional[str]]]:
 
     Yields (<plugin name>, <info>) tuples.
     """
-    versions: t.Iterator[t.Tuple[str, t.Optional[str]]] = hooks.filters.iterate(
-        hooks.Filters.PLUGINS_INFO
-    )
+    versions: t.Iterator[
+        t.Tuple[str, t.Optional[str]]
+    ] = hooks.Filters.PLUGINS_INFO.iterate()
     yield from sorted(versions, key=lambda v: v[0])
 
 
@@ -89,8 +87,9 @@ def enable(name: str) -> None:
     """
     if not is_installed(name):
         raise exceptions.TutorError(f"plugin '{name}' is not installed.")
-    with hooks.contexts.enter(hooks.Contexts.PLUGINS, hooks.Contexts.APP.format(name)):
-        hooks.actions.do(hooks.Actions.ENABLE_PLUGIN.format(name))
+    with hooks.enter_context(hooks.Contexts.PLUGINS):
+        with hooks.enter_context(hooks.Contexts.APP(name)):
+            hooks.Actions.ENABLE_PLUGIN(name).fire()
 
 
 def iter_enabled() -> t.Iterator[str]:
@@ -100,7 +99,7 @@ def iter_enabled() -> t.Iterator[str]:
     Note that enabled plugin names are deduplicated. Thus, if two plugins have
     the same name, just one name will be displayed.
     """
-    plugins: t.Iterable[str] = hooks.filters.iterate(hooks.Filters.PLUGINS_ENABLED)
+    plugins: t.Iterable[str] = hooks.Filters.PLUGINS_ENABLED.iterate()
     yield from sorted(set(plugins))
 
 
@@ -108,11 +107,11 @@ def iter_patches(name: str) -> t.Iterator[str]:
     """
     Yields: patch (str)
     """
-    yield from hooks.filters.apply(hooks.Filters.ENV_PATCH.format(name), [])
+    yield from hooks.Filters.ENV_PATCH(name).apply([])
 
 
 def disable(plugin: str) -> None:
     """
     Remove all filters and actions associated to a given plugin.
     """
-    hooks.clear_all(context=hooks.Contexts.APP.format(plugin))
+    hooks.clear_all(context=hooks.Contexts.APP(plugin))

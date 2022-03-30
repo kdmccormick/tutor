@@ -19,7 +19,7 @@ VENDOR_IMAGES = [
 ]
 
 
-@hooks.filters.add(hooks.Filters.APP_TASK_IMAGES_BUILD)
+@hooks.Filters.APP_TASK_IMAGES_BUILD.add
 def _add_core_images_to_build(
     build_images: t.List[t.Tuple[str, t.Tuple[str, str], str, t.List[str]]],
     config: Config,
@@ -33,7 +33,7 @@ def _add_core_images_to_build(
     return build_images
 
 
-@hooks.filters.add(hooks.Filters.APP_TASK_IMAGES_PULL)
+@hooks.Filters.APP_TASK_IMAGES_PULL.add
 def _add_images_to_pull(
     remote_images: t.List[t.Tuple[str, str]], config: Config
 ) -> t.List[t.Tuple[str, str]]:
@@ -48,7 +48,7 @@ def _add_images_to_pull(
     return remote_images
 
 
-@hooks.filters.add(hooks.Filters.APP_TASK_IMAGES_PULL)
+@hooks.Filters.APP_TASK_IMAGES_PULL.add
 def _add_core_images_to_push(
     remote_images: t.List[t.Tuple[str, str]], config: Config
 ) -> t.List[t.Tuple[str, str]]:
@@ -136,7 +136,7 @@ def pull(context: Context, image_names: t.List[str]) -> None:
     config = tutor_config.load_full(context.root)
     for image in image_names:
         for tag in find_remote_image_tags(
-            config, hooks.Filters.APP_TASK_IMAGES_PULL, image
+            config, hooks.Filters.APP_TASK_IMAGES_PULL.name, image
         ):
             images.pull(tag)
 
@@ -148,7 +148,7 @@ def push(context: Context, image_names: t.List[str]) -> None:
     config = tutor_config.load_full(context.root)
     for image in image_names:
         for tag in find_remote_image_tags(
-            config, hooks.Filters.APP_TASK_IMAGES_PUSH, image
+            config, hooks.Filters.APP_TASK_IMAGES_PUSH.name, image
         ):
             images.push(tag)
 
@@ -175,7 +175,7 @@ def find_images_to_build(
     """
     all_images_to_build: t.Iterator[
         t.Tuple[str, t.Tuple[str], str, t.List[str]]
-    ] = hooks.filters.iterate(hooks.Filters.APP_TASK_IMAGES_BUILD, config)
+    ] = hooks.Filters.APP_TASK_IMAGES_BUILD.iterate(config=config)
     found = False
     for name, path, tag, args in all_images_to_build:
         if name == image or image == "all":
@@ -198,7 +198,9 @@ def find_remote_image_tags(
     Yield: tag
     """
     all_remote_images: t.List[t.Tuple[str, str]] = []
-    all_remote_images = hooks.filters.apply(filter_name, all_remote_images, config)
+    all_remote_images = hooks.Filter(filter_name).apply(
+        all_remote_images, config=config
+    )
     found = False
     for name, tag in all_remote_images:
         if name == image or image == "all":

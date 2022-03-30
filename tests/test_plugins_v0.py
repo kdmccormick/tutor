@@ -76,6 +76,9 @@ class PluginsTests(PluginsTestCase):
         )
         config: Config = {"PLUGINS": ["plugin1"], "KEY": "value"}
         tutor_config.enable_plugins(config)
+        self.assertEqual(["plugin1"], config["PLUGINS"])
+        self.assertEqual("value", config["KEY"])
+
         with patch.object(fmt, "STDOUT"):
             tutor_config.disable_plugin(config, "plugin1")
         self.assertEqual([], config["PLUGINS"])
@@ -170,7 +173,7 @@ class PluginsTests(PluginsTestCase):
         plugins.enable("plugin1")
         self.assertIn(
             ("myclient", ("plugin1", "hooks", "myclient", "init")),
-            list(hooks.filters.iterate(hooks.Filters.APP_TASK_INIT)),
+            list(hooks.Filters.APP_TASK_INIT.iterate()),
         )
 
     def test_plugins_are_updated_on_config_change(self) -> None:
@@ -190,9 +193,9 @@ class PluginsTests(PluginsTestCase):
             {"name": "myplugin", "config": {"set": {"KEY": "value"}}, "version": "0.1"}
         )
         plugins.enable("myplugin")
-        overriden_items: t.List[t.Tuple[str, t.Any]] = hooks.filters.apply(
-            hooks.Filters.CONFIG_OVERRIDES, []
-        )
+        overriden_items: t.List[
+            t.Tuple[str, t.Any]
+        ] = hooks.Filters.CONFIG_OVERRIDES.apply([])
         versions = list(plugins.iter_info())
         self.assertEqual("myplugin", plugin.name)
         self.assertEqual([("myplugin", "0.1")], versions)

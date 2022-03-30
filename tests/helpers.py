@@ -64,8 +64,7 @@ class PluginsTestCase(unittest.TestCase):
             hooks.Contexts.PLUGINS_V0_YAML,
             "unittests",
         ]:
-            hooks.filters.clear_all(context=context)
-            hooks.actions.clear_all(context=context)
+            hooks.clear_all(context=context)
 
     def run(
         self, result: t.Optional[unittest.result.TestResult] = None
@@ -74,5 +73,5 @@ class PluginsTestCase(unittest.TestCase):
         Run all actions and filters with a test context, such that they can be cleared
         from one run to the next.
         """
-        with hooks.contexts.enter("unittests"):
+        with hooks.enter_context("unittests"):
             return super().run(result=result)

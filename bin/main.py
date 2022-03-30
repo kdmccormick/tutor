@@ -4,7 +4,7 @@ from tutor.commands.cli import main
 from tutor.plugins.v0 import OfficialPlugin
 
 
-@hooks.actions.on(hooks.Actions.INSTALL_PLUGINS)
+@hooks.Actions.INSTALL_PLUGINS.handle()
 def _install_official_plugins() -> None:
     # Manually install plugins: that's because entrypoint plugins are not properly
     # detected within the binary bundle.

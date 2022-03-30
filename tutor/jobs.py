@@ -42,7 +42,7 @@ class BaseComposeJobRunner(BaseJobRunner):
         raise NotImplementedError
 
 
-@hooks.actions.on(hooks.Actions.CORE_READY)
+@hooks.Actions.CORE_READY.handle()
 def _add_core_init_tasks() -> None:
     """
     Declare core init scripts at runtime.
@@ -50,36 +50,30 @@ def _add_core_init_tasks() -> None:
     The context is important, because it allows us to select the init scripts based on
     the --limit argument.
     """
-    with hooks.contexts.enter(hooks.Contexts.APP.format("mysql")):
-        hooks.filters.add_item(
-            hooks.Filters.APP_TASK_INIT, ("mysql", ("hooks", "mysql", "init"))
-        )
-    with hooks.contexts.enter(hooks.Contexts.APP.format("lms")):
-        hooks.filters.add_item(
-            hooks.Filters.APP_TASK_INIT, ("lms", ("hooks", "lms", "init"))
-        )
-    with hooks.contexts.enter(hooks.Contexts.APP.format("cms")):
-        hooks.filters.add_item(
-            hooks.Filters.APP_TASK_INIT, ("cms", ("hooks", "cms", "init"))
-        )
+    with hooks.enter_context(hooks.Contexts.APP("mysql")):
+        hooks.Filters.APP_TASK_INIT.add_item(("mysql", ("hooks", "mysql", "init")))
+    with hooks.enter_context(hooks.Contexts.APP("lms")):
+        hooks.Filters.APP_TASK_INIT.add_item(("lms", ("hooks", "lms", "init")))
+    with hooks.enter_context(hooks.Contexts.APP("cms")):
+        hooks.Filters.APP_TASK_INIT.add_item(("cms", ("hooks", "cms", "init")))
 
 
 def initialise(runner: BaseJobRunner, limit_to: t.Optional[str] = None) -> None:
     fmt.echo_info("Initialising all services...")
-    filter_context = hooks.Contexts.APP.format(limit_to) if limit_to else None
+    filter_context = hooks.Contexts.APP(limit_to) if limit_to else None
 
     # Pre-init tasks
     iter_pre_init_tasks: t.Iterator[
         t.Tuple[str, t.Iterable[str]]
-    ] = hooks.filters.iterate(hooks.Filters.APP_TASK_PRE_INIT, context=filter_context)
+    ] = hooks.Filters.APP_TASK_PRE_INIT.iterate(context=filter_context)
     for service, path in iter_pre_init_tasks:
         fmt.echo_info(f"Running pre-init task: {'/'.join(path)}")
         runner.run_job_from_template(service, *path)
 
     # Init tasks
-    iter_init_tasks: t.Iterator[t.Tuple[str, t.Iterable[str]]] = hooks.filters.iterate(
-        hooks.Filters.APP_TASK_INIT, context=filter_context
-    )
+    iter_init_tasks: t.Iterator[
+        t.Tuple[str, t.Iterable[str]]
+    ] = hooks.Filters.APP_TASK_INIT.iterate(context=filter_context)
     for service, path in iter_init_tasks:
         fmt.echo_info(f"Running init task: {'/'.join(path)}")
         runner.run_job_from_template(service, *path)

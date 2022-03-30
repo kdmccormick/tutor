@@ -88,8 +88,7 @@ class ConfigPluginTestCase(PluginsTestCase):
         with temporary_root() as root:
             mock_random_string = Mock()
 
-            hooks.filters.add_item(
-                hooks.Filters.ENV_TEMPLATE_FILTERS,
+            hooks.Filters.ENV_TEMPLATE_FILTERS.add_item(
                 ("random_string", mock_random_string),
             )
             mock_random_string.return_value = "abcd"
