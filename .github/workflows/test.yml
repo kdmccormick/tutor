@@ -4,7 +4,7 @@ on:
   push:
     branches: [ master, nightly ]
   pull_request:
-    branches: [ master, nightly ]
+    branches: [ '*' ]
 
 jobs:
   tests:
@@ -29,7 +29,7 @@ jobs:
         run: make test-format
       - name: Package tests
         run: make test-pythonpackage
-      - name: Install docs dependencies
-        run: pip install -r requirements/docs.txt
-      - name: Build docs
-        run: make docs
+#      - name: Install docs dependencies
+#        run: pip install -r requirements/docs.txt
+#      - name: Build docs
+#        run: make docs
