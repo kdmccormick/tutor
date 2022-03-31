@@ -4,6 +4,9 @@ Note: Breaking changes between versions are indicated by "💥".
 
 ## Unreleased
 
+- 💥[Improvement] Complete overhaul of the plugin extension mechanism. Tutor now has a hook-based Python API: actions can be triggered at different points of the application life cycle and data can be modified thanks to custom filters. The v0 plugin API is still supported, for backward compatibility, but plugin developers are encouraged to migrate their plugins to the new API. See the new plugin tutorial for more information.
+- [Improvement] Improved the output of `tutor plugins list`.
+
 ## v13.1.8 (2022-03-18)
 
 - [Bugfix] Fix "evalsymlink failure" during `k8s quickstart` (#611).
