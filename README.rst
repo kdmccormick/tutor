@@ -63,8 +63,19 @@ Features
 Quickstart
 ----------
 
+For Open edX deployers
+~~~~~~~~~~~~~~~~~~~~~~
+
 1. Install the `latest stable release <https://github.com/overhangio/tutor/releases>`_ of Tutor
 2. Run ``tutor local quickstart``
+3. You're done!
+
+
+For Open edX develeopers
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. Install `Tutor Nightly <docs/tutorials/nightly.rst#install>`_
+2. Run ``tutor dev quickstart``
 3. You're done!
 
 Documentation
