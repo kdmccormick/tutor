@@ -4,8 +4,9 @@ import click
 
 from .. import config as tutor_config
 from .. import env as tutor_env
-from .. import fmt
+from .. import exceptions, fmt, utils
 from ..types import Config, get_typed
+from .config import save as config_save_command
 from . import compose
 
 
@@ -33,6 +34,110 @@ class DevJobRunner(compose.ComposeJobRunner):
 class DevContext(compose.BaseComposeContext):
     def job_runner(self, config: Config) -> DevJobRunner:
         return DevJobRunner(self.root, config)
+
+    def is_dev(self) -> bool:
+        return True
+
+
+@click.command(help="Configure and run Open edX from scratch, for development")
+@click.option("-I", "--non-interactive", is_flag=True, help="Run non-interactively")
+@click.option("-p", "--pullimages", is_flag=True, help="Update docker images")
+@click.pass_context
+def quickstart(context: click.Context, non_interactive: bool, pullimages: bool) -> None:
+    try:
+        utils.check_macos_docker_memory()
+    except exceptions.TutorError as e:
+        fmt.echo_alert(
+            f"""Could not verify sufficient RAM allocation in Docker:
+
+    {e}
+
+Tutor may not work if Docker is configured with < 4 GB RAM. Please follow instructions from:
+
+    https://docs.tutor.overhang.io/install.html"""
+        )
+
+    click.echo(fmt.title("Interactive platform configuration"))
+    context.invoke(config_save_command, interactive=(not non_interactive))
+    config = tutor_config.load(context.obj.root)
+
+    if non_interactive:
+        import_demo = False
+        create_superuser = False
+    else:
+        import_demo = click.confirm(
+            fmt.question("Import the demo course?"),
+            prompt_suffix=" ",
+            default=True,
+        )
+        create_superuser = click.confirm(
+            fmt.question("Create/update a superuser?"),
+            prompt_suffix=" ",
+            default=True,
+        )
+        if create_superuser:
+            superuser_username = click.prompt(
+                fmt.question("  Username for superuser"),
+                prompt_suffix=" ",
+                show_default=True,
+                default="admin",
+            )
+            superuser_email = click.prompt(
+                fmt.question("  Email for superuser"),
+                prompt_suffix=" ",
+                show_default=True,
+                default=f"admin@{config['LMS_HOST']}",
+            )
+            superuser_password = click.prompt(
+                fmt.question("  Password for superuser"),
+                prompt_suffix=" ",
+                show_default=True,
+                default="password",
+            )
+
+    click.echo(fmt.title("Stopping any existing platform"))
+    context.invoke(compose.stop)
+
+    if pullimages:
+        click.echo(fmt.title("Docker image updates"))
+        context.invoke(compose.dc_command, command="pull")
+
+    click.echo(fmt.title("Building Docker image for LMS and CMS development"))
+    context.invoke(compose.dc_command, command="build", args=["lms"])
+
+    click.echo(fmt.title("Starting the platform in detached mode"))
+    context.invoke(compose.start, detach=True)
+
+    click.echo(fmt.title("Database creation and migrations"))
+    context.invoke(compose.init)
+
+    if import_demo:
+        click.echo(fmt.title("Importing the demo course"))
+        context.invoke(compose.importdemocourse)
+
+    if create_superuser:
+        click.echo(fmt.title("Creating or updating a superuser"))
+        context.invoke(
+            compose.createuser,
+            name=superuser_username,
+            password=superuser_password,
+            email=superuser_email,
+            staff=True,
+            superuser=True,
+        )
+
+    fmt.echo_info(
+        """The Open edX platform is now running in detached mode
+Your Open edX platform is ready and can be accessed at the following urls:
+
+    {http}://{lms_host}
+    {http}://{cms_host}
+    """.format(
+            http="https" if config["ENABLE_HTTPS"] else "http",
+            lms_host=config["LMS_HOST"],
+            cms_host=config["CMS_HOST"],
+        )
+    )
 
 
 @click.group(help="Run Open edX locally with development settings")
@@ -62,5 +167,6 @@ def runserver(context: click.Context, options: List[str], service: str) -> None:
     context.invoke(compose.run, args=args)
 
 
+dev.add_command(quickstart)
 dev.add_command(runserver)
 compose.add_commands(dev)
