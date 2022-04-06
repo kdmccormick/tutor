@@ -5,8 +5,6 @@ Running Open edX on the master branch ("nightly")
 
 Tutor was designed to make it easy for everyone to run the latest release of Open edX. But sometimes, you want to run the latest, bleeding-edge version of Open edX. This is what we call "running master", as opposed to running the release branch. Running the master branch in production is strongly **not** recommended unless you are an Open edX expert and you really know what you are doing. But Open edX developers frequently need to run the master branch locally to implement and test new features. Thus, Tutor makes it easy to run Open edX on the master branch: this is called "Tutor Nightly".
 
-.. _install:
-
 Installing Tutor Nightly
 ------------------------
 

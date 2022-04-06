@@ -74,7 +74,7 @@ For Open edX deployers
 For Open edX develeopers
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-1. Install `Tutor Nightly <docs/tutorials/nightly.rst#install>`_
+1. Install `Tutor Nightly <docs/tutorials/nightly.rst>`_
 2. Run ``tutor dev quickstart``
 3. You're done!
 
