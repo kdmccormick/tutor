@@ -132,6 +132,9 @@ class Filters:
     #: :parameter list[tuple[str, tuple[str, ...]]] tasks: list of ``(service, path)`` tasks. (see :py:data:`APP_TASK_INIT`).
     APP_TASK_PRE_INIT = hooks.filters.get("app:tasks:pre-init")
 
+    # TODO
+    APP_MOUNT_CLAIMS = hooks.filters.get("app:mounts:claims")
+
     #: List of command line interface (CLI) commands.
     #:
     #: :parameter list commands: commands are instances of ``click.Command``. They will

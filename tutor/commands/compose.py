@@ -1,15 +1,28 @@
 import os
-from typing import List
+from collections import defaultdict
+from dataclasses import dataclass
+from os import path
+from typing import List, Dict, Tuple
 
 import click
-
+from typing_extensions import TypeAlias
 from .. import bindmounts
 from .. import config as tutor_config
 from .. import env as tutor_env
 from .. import fmt, jobs, utils
 from ..exceptions import TutorError
+from ..hooks import Filters
 from ..types import Config
 from .context import BaseJobContext
+
+
+@dataclass(frozen=True)
+class Mount:
+    host_path: str
+    container_path: str
+
+
+ServiceMounts: TypeAlias = Dict[str, List[Mount]]
 
 
 class ComposeJobRunner(jobs.BaseComposeJobRunner):
@@ -66,11 +79,33 @@ class BaseComposeContext(BaseJobContext):
 )
 @click.option("--skip-build", is_flag=True, help="Skip image building")
 @click.option("-d", "--detach", is_flag=True, help="Start in daemon mode")
+@click.option(
+    "-m",
+    "--mount",
+    multiple=True,
+    metavar="[SERVICES:]PATH[:TARGET]",
+    help=(
+        "Bind-mount a host directory PATH. "
+        "Optionally specify comma-separated SERVICES "
+        "and a TARGET path; if omitted, they are "
+        "deduced from the directory's name."
+    ),
+)
 @click.argument("services", metavar="service", nargs=-1)
 @click.pass_obj
 def start(
-    context: BaseComposeContext, skip_build: bool, detach: bool, services: List[str]
+    context: BaseComposeContext,
+    skip_build: bool,
+    detach: bool,
+    mount: List[str],
+    services: List[str],
 ) -> None:
+    _service_mounts: ServiceMounts = _parse_mounts(mount)
+    from pprint import pprint
+
+    pprint(_service_mounts)
+    return
+
     command = ["up", "--remove-orphans"]
     if not skip_build:
         command.append("--build")
@@ -80,6 +115,49 @@ def start(
     # Start services
     config = tutor_config.load(context.root)
     context.job_runner(config).docker_compose(*command, *services)
+
+
+def _parse_mounts(mount_specifiers: List[str]) -> ServiceMounts:
+    result: ServiceMounts = defaultdict(list)
+    for mount_spec in mount_specifiers:
+        if ":" in mount_spec:
+            mount_spec_parts = mount_spec.split(":")
+            if len(mount_spec_parts) != 3:
+                raise Exception("bad mount spec")  # TODO: improve error message
+            for service in mount_spec_parts[0].split(","):
+                result[service].append(
+                    Mount(
+                        host_path=path.normpath(path.abspath(mount_spec_parts[1])),
+                        container_path=mount_spec_parts[2],
+                    )
+                )
+        else:
+            host_path = path.normpath(path.abspath(mount_spec))
+            dir_name = path.basename(host_path)
+            claims: List[Tuple[str, str]] = Filters.APP_MOUNT_CLAIMS.apply(
+                [], dir_name=dir_name
+            )
+            if not claims:
+                # TODO: improve error message
+                raise Exception(f"couldn't determine any mount points for {host_path}")
+            for service, container_path in claims:
+                result[service].append(
+                    Mount(host_path=host_path, container_path=container_path)
+                )
+    return dict(result)
+
+
+@Filters.APP_MOUNT_CLAIMS.add()
+def _add_core_mount_claims(
+    claims: List[Tuple[str, str]], dir_name: str
+) -> List[Tuple[str, str]]:
+    edx_platform_services = ["lms", "cms", "lms-worker", "cms-worker"]
+    for service in edx_platform_services:
+        if dir_name == "edx-platform":
+            claims = claims + [(service, "/openedx/edx-platform")]
+        if dir_name == "edx-platform-venv":
+            claims = claims + [(service, "/openedx/venv")]
+    return claims
 
 
 @click.command(help="Stop a running platform")
