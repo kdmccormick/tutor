@@ -56,7 +56,7 @@ def local(context: click.Context) -> None:
 @click.option("-I", "--non-interactive", is_flag=True, help="Run non-interactively")
 @click.option("-p", "--pullimages", is_flag=True, help="Update docker images")
 @click.pass_context
-def quickstart(
+def setup(
     context: click.Context,
     mounts: t.Tuple[t.List[compose.MountParam.MountType]],
     non_interactive: bool,
@@ -147,6 +147,26 @@ Your Open edX platform is ready and can be accessed at the following urls:
     )
 
 
+@click.command(help="DEPRECATED - Use 'tutor local setup ...' instead!")
+@compose.mount_option
+@click.option("-I", "--non-interactive", is_flag=True, help="Run non-interactively")
+@click.option("-p", "--pullimages", is_flag=True, help="Update docker images")
+@click.pass_context
+def quickstart(
+    context: click.Context,
+    mounts: t.Tuple[t.List[compose.MountParam.MountType]],
+    non_interactive: bool,
+    pullimages: bool,
+) -> None:
+    depr_warning = """'tutor local quickstart' has been renamed to 'tutor local setup'.
+   'tutor local quickstart' will stop working in a future release."""
+    fmt.echo_alert(depr_warning)
+    context.invoke(setup, non_interactive=non_interactive, pullimages=pullimages)
+    context.invoke(
+        setup, mounts=mounts, non_interactive=non_interactive, pullimages=pullimages
+    )
+
+
 @click.command(
     short_help="Perform release-specific upgrade tasks",
     help="Perform release-specific upgrade tasks. To perform a full upgrade remember to run `quickstart`.",
@@ -183,6 +203,7 @@ def _stop_on_dev_start(root: str, config: Config, project_name: str) -> None:
         runner.docker_compose("stop")
 
 
+local.add_command(setup)
 local.add_command(quickstart)
 local.add_command(upgrade)
 compose.add_commands(local)

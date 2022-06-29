@@ -163,7 +163,7 @@ def k8s(context: click.Context) -> None:
 @click.command(help="Configure and run Open edX from scratch")
 @click.option("-I", "--non-interactive", is_flag=True, help="Run non-interactively")
 @click.pass_context
-def quickstart(context: click.Context, non_interactive: bool) -> None:
+def setup(context: click.Context, non_interactive: bool) -> None:
     run_upgrade_from_release = tutor_env.should_upgrade_from_release(context.obj.root)
     if run_upgrade_from_release is not None:
         click.echo(fmt.title("Upgrading from an older release"))
@@ -212,6 +212,16 @@ Press enter when you are ready to continue"""
             cms_host=config["CMS_HOST"],
         )
     )
+
+
+@click.command(help="DEPRECATED: USE 'tutor k8s setup ...' instead!")
+@click.option("-I", "--non-interactive", is_flag=True, help="Run non-interactively")
+@click.pass_context
+def quickstart(context: click.Context, non_interactive: bool) -> None:
+    depr_warning = """'tutor k8s quickstart' has been renamed to 'tutor k8s setup'.
+   'tutor k8s quickstart' will stop working in a future release."""
+    fmt.echo_alert(depr_warning)
+    context.invoke(setup, non_interactive=non_interactive)
 
 
 @click.command(
@@ -569,6 +579,7 @@ def k8s_namespace(config: Config) -> str:
     return get_typed(config, "K8S_NAMESPACE", str)
 
 
+k8s.add_command(setup)
 k8s.add_command(quickstart)
 k8s.add_command(start)
 k8s.add_command(stop)

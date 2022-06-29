@@ -55,7 +55,7 @@ def dev(context: click.Context) -> None:
 @click.option("-I", "--non-interactive", is_flag=True, help="Run non-interactively")
 @click.option("-p", "--pullimages", is_flag=True, help="Update docker images")
 @click.pass_context
-def quickstart(context: click.Context, non_interactive: bool, pullimages: bool) -> None:
+def setup(context: click.Context, non_interactive: bool, pullimages: bool) -> None:
     try:
         utils.check_macos_docker_memory()
     except exceptions.TutorError as e:
@@ -103,6 +103,17 @@ Your Open edX platform is ready and can be accessed at the following urls:
     )
 
 
+@click.command(help="DEPRECATED: USE 'tutor dev setup ...' instead!")
+@click.option("-I", "--non-interactive", is_flag=True, help="Run non-interactively")
+@click.option("-p", "--pullimages", is_flag=True, help="Update docker images")
+@click.pass_context
+def quickstart(context: click.Context, non_interactive: bool, pullimages: bool) -> None:
+    depr_warning = """'tutor dev quickstart' has been renamed to 'tutor dev setup'.
+   'tutor dev quickstart' will stop working in a future release."""
+    fmt.echo_alert(depr_warning)
+    context.invoke(setup, non_interactive=non_interactive, pullimages=pullimages)
+
+
 @click.command(
     help="DEPRECATED: Use 'tutor dev start ...' instead!",
     context_settings={"ignore_unknown_options": True},
@@ -145,6 +156,7 @@ def _stop_on_local_start(root: str, config: Config, project_name: str) -> None:
         runner.docker_compose("stop")
 
 
+dev.add_command(setup)
 dev.add_command(quickstart)
 dev.add_command(runserver)
 compose.add_commands(dev)
