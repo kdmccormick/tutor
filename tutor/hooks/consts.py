@@ -189,17 +189,21 @@ class Filters:
 
     #: List command line interface (CLI) tasks, which are added to the ``tutor ... do ...`` command subgroup.
     #:
-    #: :parameter list[tuple[str, str, list[tuple[str, str]]]] tasks:
+    #: :parameter list[tuple[str, str, list[tuple[str, tuple[str, ...]]]]] tasks:
     #:
-    #:   A list of (``task_name``, ``task_help``, ``task_commands``) tuples. Each tuple describes a CLI task:
+    #:   A list of (``name``, ``helptext``, ``service_tasks``) tuples. Each tuple describes a CLI task:
     #:
-    #:    - ``task_name`` is the string used to invoke the task on the CLI, e.g. ``tutor local do <task_name> ...``.
-    #:    - ``task_help`` is the help message displayed for this task when the user runs ``tutor ... do``.
-    #:    - ``task_commands`` are a list of (``service``, ``command``) tuples. When the task
-    #:      is invoked, each shell ``command`` in the list will be run in its corresponding ``service``.
+    #:    - ``name`` is the string used to invoke the task on the CLI, e.g. ``tutor local do <task_name> ...``.
+    #:    - ``helptext`` is the help message displayed for this task when the user runs ``tutor ... do``.
+    #:    - ``service_tasks`` are a list of (``service``, ``path``) tuples to invoke when the task is run, where:
     #:
-    #:  If the same ``task_name`` appears in the list more than once, then its first ``task_help`` is used, and
-    #:  all of its ``task_commands`` are combined together.
+    #:      - ``path`` is tuple indicating the template-relative path to a script, and
+    #:      - ``service`` indicates the service in which said script will be run.
+    #:
+    #:   Example: ``[("mytask", "Runs myscript in LMS", [("lms", ("path", "to", "myscript"))])]``
+    #:
+    #:   If the same ``name`` appears in the list more than once, then only its first ``helptext`` is used,
+    #:   but all of its ``service_task`` lists are combined together.
     CLI_TASKS = filters.get("cli:tasks")
 
     #: Declare new default configuration settings that don't necessarily have to be saved in the user

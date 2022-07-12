@@ -50,16 +50,17 @@ def run_task(
 ) -> None:
     limited_context = hooks.Contexts.APP(limit_to).name if limit_to else None
     tasks: t.Iterable[
-        t.Tuple[str, str, t.List[t.Tuple[str, str]]]
+        t.Tuple[str, str, t.List[t.Tuple[str, t.Tuple[str, ...]]]]
     ] = hooks.Filters.CLI_TASKS.iterate(context=limited_context)
+    if name not in set(task[0] for task in tasks):
+        raise TutorError(f"No CLI_TASKS are defined for '{name}'")
     args_str = (" " + " ".join(args)) if args else ""
     for task_name, _task_helptext, task_service_commands in tasks:
         if task_name != name:
             continue
-        for service, command in task_service_commands:
-            runner.run_job(service, command + args_str)
-    else:
-        raise TutorError(f"CLI_TASKS does not define any commands for task '{name}'")
+        for service, path in task_service_commands:
+            base_command = runner.render(*path)
+            runner.run_job(service, base_command + args_str)
 
 
 @hooks.Actions.CORE_READY.add()
@@ -131,10 +132,6 @@ u.save()"
 """
 
     return command.format(opts=opts, username=username, email=email, password=password)
-
-
-def import_demo_course(runner: BaseJobRunner) -> None:
-    runner.run_job_from_template("cms", "hooks", "cms", "importdemocourse")
 
 
 def set_theme(

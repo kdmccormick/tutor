@@ -17,10 +17,22 @@ def do_command() -> None:
     pass
 
 
+# Add built-in tasks to CLI_TASKS.
+hooks.Filters.CLI_TASKS.add_items(
+    [
+        (
+            "importdemocourse",
+            "Import the demo course",
+            [("cms", ("hooks", "cms", "importdemocourse"))],
+        )
+    ]
+)
+
+
 @hooks.Actions.PLUGINS_LOADED.add()
 def _add_tasks_to_do_command() -> None:
     tasks: t.Iterable[
-        t.Tuple[str, str, t.List[t.Tuple[str, str]]]
+        t.Tuple[str, str, t.List[t.Tuple[str, t.Tuple[str, ...]]]]
     ] = hooks.Filters.CLI_TASKS.iterate()
 
     task_name_helptext: t.Dict[str, str] = {}
