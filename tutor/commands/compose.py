@@ -9,6 +9,7 @@ from tutor import config as tutor_config
 from tutor import env as tutor_env
 from tutor import fmt, hooks, jobs, serialize, utils
 from tutor.commands.context import BaseJobContext
+from tutor.commands.do import do_command
 from tutor.exceptions import TutorError
 from tutor.types import Config
 
@@ -304,49 +305,6 @@ def importdemocourse(context: BaseComposeContext) -> None:
     jobs.import_demo_course(runner)
 
 
-@click.group(help="Do a task", subcommand_metavar="TASKNAME [ARGS] ...")
-def do() -> None:
-    pass
-
-
-def _do_task(context: BaseJobContext, task_name: str, limit_to: str) -> None:
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-
-    limited_context = hooks.Contexts.APP(limit_to).name if limit_to else None
-    tasks: t.Iterable[
-        t.Tuple[str, str, t.List[t.Tuple[str, str]]]
-    ] = hooks.Filters.CLI_TASKS.iterate(context=limited_context)
-
-    for name, _helptext, service_commands in tasks:
-        if name != task_name:
-            continue
-        for service, command in service_commands:
-            runner.run_job(service, command)
-
-
-@hooks.Actions.PLUGINS_LOADED.add()
-def _add_tasks_to_do_group() -> None:
-    tasks: t.Iterable[
-        t.Tuple[str, str, t.List[t.Tuple[str, str]]]
-    ] = hooks.Filters.CLI_TASKS.iterate()
-
-    task_name_helptext: t.Dict[str, str] = {}
-    for name, helptext, _service_commands in tasks:
-        # In the that CLI_TASKS returns multiple entries with the same
-        # name, take the helptext of the first entry.
-        if name not in task_name_helptext:
-            task_name_helptext[name] = helptext
-
-    for name, helptext in sorted(task_name_helptext.items()):
-
-        @do.command(name=name, help=helptext)
-        @click.pass_obj
-        @click.option("-l", "--limit", help="Limit initialisation to just this plugin")
-        def _do_task_command(context: BaseComposeContext, limit: str) -> None:
-            _do_task(context=context, task_name=name, limit_to=limit)
-
-
 @click.command(
     short_help="Run a command in a new container",
     help=(
@@ -598,7 +556,7 @@ def add_commands(command_group: click.Group) -> None:
     command_group.add_command(settheme)
     command_group.add_command(dc_command)
     command_group.add_command(run)
-    command_group.add_command(do)
+    command_group.add_command(do_command)
     command_group.add_command(copyfrom)
     command_group.add_command(bindmount_command)
     command_group.add_command(execute)

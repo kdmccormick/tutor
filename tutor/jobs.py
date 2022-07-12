@@ -41,6 +41,21 @@ class BaseComposeJobRunner(BaseJobRunner):
         raise NotImplementedError
 
 
+def run_task(
+    runner: BaseJobRunner, name: str, limit_to: str, args: t.List[str]
+) -> None:
+    limited_context = hooks.Contexts.APP(limit_to).name if limit_to else None
+    tasks: t.Iterable[
+        t.Tuple[str, str, t.List[t.Tuple[str, str]]]
+    ] = hooks.Filters.CLI_TASKS.iterate(context=limited_context)
+    args_str = (" " + " ".join(args)) if args else ""
+    for task_name, _task_helptext, task_service_commands in tasks:
+        if task_name != name:
+            continue
+        for service, command in task_service_commands:
+            runner.run_job(service, command + args_str)
+
+
 @hooks.Actions.CORE_READY.add()
 def _add_core_init_tasks() -> None:
     """
