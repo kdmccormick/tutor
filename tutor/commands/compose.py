@@ -306,9 +306,8 @@ def importdemocourse(context: click.Context) -> None:
         f"""'tutor {dev_or_local} importdemocourse' has been renamed to 'tutor {dev_or_local} do importdemocourse'.
    'tutor {dev_or_local} importdemocourse' (without 'do') will stop working in a future release."""
     )
-    config = tutor_config.load(context.obj.root)
-    runner = context.obj.job_runner(config)
-    jobs.run_task(runner, "importdemocourse")
+    do_importdemocourse: click.Command = do_command.get_command(context, "importdemocourse")  # type: ignore
+    context.invoke(do_importdemocourse)
 
 
 @click.command(

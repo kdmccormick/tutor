@@ -4,7 +4,7 @@ import click
 
 from .. import config as tutor_config
 from .. import hooks
-from ..jobs import run_task
+from ..jobs import BaseJobRunner
 from .context import BaseJobContext
 
 
@@ -72,7 +72,7 @@ def _add_tasks_to_do_command() -> None:
             help="Limit scope of task execution. Valid values: lms, cms, mysql, or a plugin name.",
         )
         @click.argument("args", nargs=-1)
-        def _do_task_command(
+        def _do_subcommand(
             context: BaseJobContext, limit: str, args: t.List[str]
         ) -> None:
             """
@@ -80,4 +80,34 @@ def _add_tasks_to_do_command() -> None:
             """
             config = tutor_config.load(context.root)
             runner = context.job_runner(config)
-            run_task(runner=runner, name=name, limit_to=limit, args=args)
+            _run_task(runner=runner, name=name, limit_to=limit, args=args)
+
+
+def _run_task(
+    runner: BaseJobRunner,
+    name: str,
+    limit_to: str = "",
+    args: t.Optional[t.List[str]] = None,
+) -> None:
+    """
+    Run a task defined by CLI_TASKS within job containers.
+    """
+
+    # Execution may be limited to:
+    #   * a core app, specifically 'lms', 'cms', or 'mysql'; or
+    #   * any plugin.
+    # If limited, we will only run commands defined within that context.
+    limited_context = hooks.Contexts.APP(limit_to).name if limit_to else None
+    tasks: t.List[t.Tuple[str, str, t.List[t.Tuple[str, t.Tuple[str, ...]]]]] = list(
+        hooks.Filters.CLI_TASKS.iterate(context=limited_context)
+    )
+
+    # For each task, for each service/path handler, render the script at `path`
+    # and then run it in `service` and pass it any additional `args`.
+    args_str = (" " + " ".join(args)) if args else ""
+    for task_name, _task_helptext, task_service_commands in tasks:
+        if task_name != name:
+            continue
+        for service, path in task_service_commands:
+            base_command = runner.render(*path)
+            runner.run_job(service, base_command + args_str)
