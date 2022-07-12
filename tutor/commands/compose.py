@@ -305,7 +305,7 @@ def importdemocourse(context: BaseComposeContext) -> None:
 
 
 @click.group(help="Do a task", subcommand_metavar="TASKNAME [ARGS] ...")
-def do(context: click.Context, **options: t.Dict[str, t.Any]) -> None:
+def do() -> None:
     pass
 
 
@@ -313,9 +313,9 @@ def _do_task(context: BaseComposeContext, task_name: str) -> None:
     config = tutor_config.load(context.root)
     runner = context.job_runner(config)
     tasks: t.Iterable[
-        t.Tuple[str, t.List[t.Tuple[str, str]]]
+        t.Tuple[str, str, t.List[t.Tuple[str, str]]]
     ] = hooks.Filters.CLI_TASKS.iterate()
-    for name, service_commands in tasks:
+    for name, _helptext, service_commands in tasks:
         if name != task_name:
             continue
         for service, command in service_commands:
@@ -325,15 +325,23 @@ def _do_task(context: BaseComposeContext, task_name: str) -> None:
 @hooks.Actions.PLUGINS_LOADED.add()
 def _add_tasks_to_do_group() -> None:
     tasks: t.Iterable[
-        t.Tuple[str, t.List[t.Tuple[str, str]]]
+        t.Tuple[str, str, t.List[t.Tuple[str, str]]]
     ] = hooks.Filters.CLI_TASKS.iterate()
-    task_names = sorted(set(name for (name, _) in tasks))
-    for task_name in task_names:
 
-        @do.command(name=task_name)
+    task_name_helptexts: t.Dict[str, str] = {}
+    for name, helptext, _service_commands in tasks:
+        if name in task_name_helptexts:
+            # We want to take the first helptext for each task_name,
+            # so skip any additional ones that appear.
+            continue
+        task_name_helptexts[name] = helptext
+
+    for name, helptext in sorted(task_name_helptexts.items()):
+
+        @do.command(name=name, help=helptext)
         @click.pass_obj
-        def _do_task_command(context: ComposeDoContext) -> None:
-            _do_task(context, task_name)
+        def _do_task_command(context: BaseComposeContext) -> None:
+            _do_task(context, name)
 
 
 @click.command(
