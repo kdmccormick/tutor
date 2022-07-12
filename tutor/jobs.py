@@ -1,6 +1,7 @@
 import typing as t
 
 from tutor import env, fmt, hooks
+from tutor.exceptions import TutorError
 from tutor.types import Config, get_typed
 
 BASE_OPENEDX_COMMAND = """
@@ -42,7 +43,10 @@ class BaseComposeJobRunner(BaseJobRunner):
 
 
 def run_task(
-    runner: BaseJobRunner, name: str, limit_to: str, args: t.List[str]
+    runner: BaseJobRunner,
+    name: str,
+    limit_to: str = "",
+    args: t.Optional[t.List[str]] = None,
 ) -> None:
     limited_context = hooks.Contexts.APP(limit_to).name if limit_to else None
     tasks: t.Iterable[
@@ -54,6 +58,8 @@ def run_task(
             continue
         for service, command in task_service_commands:
             runner.run_job(service, command + args_str)
+    else:
+        raise TutorError(f"CLI_TASKS does not define any commands for task '{name}'")
 
 
 @hooks.Actions.CORE_READY.add()

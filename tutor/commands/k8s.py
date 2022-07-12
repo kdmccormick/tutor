@@ -385,13 +385,18 @@ def createuser(
     runner.run_job("lms", command)
 
 
-@click.command(help="Import the demo course")
-@click.pass_obj
-def importdemocourse(context: K8sContext) -> None:
-    fmt.echo_info("Importing demo course")
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    jobs.import_demo_course(runner)
+@click.command(
+    help="DEPRECATED: Use 'tutor k8s do importdemocourse' instead!",
+)
+@click.pass_context
+def importdemocourse(context: click.Context) -> None:
+    fmt.echo_alert(
+        """'tutor k8s importdemocourse' has been renamed to 'tutor k8s do importdemocourse'.
+   'tutor k8s importdemocourse' (without 'do') will stop working in a future release."""
+    )
+    config = tutor_config.load(context.obj.root)
+    runner = context.obj.job_runner(config)
+    jobs.run_task(runner, "importdemocourse")
 
 
 @click.command(

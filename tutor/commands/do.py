@@ -8,7 +8,11 @@ from ..jobs import run_task
 from .context import BaseJobContext
 
 
-@click.group(name="do", help="Do a task", subcommand_metavar="TASKNAME [ARGS] ...")
+@click.group(
+    name="do",
+    help="Run a predefined task in new containers",
+    subcommand_metavar="TASKNAME [ARGS] ...",
+)
 def do_command() -> None:
     pass
 

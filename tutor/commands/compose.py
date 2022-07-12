@@ -296,13 +296,19 @@ def settheme(
     jobs.set_theme(theme_name, domains, runner)
 
 
-@click.command(help="Import the demo course")
-@click.pass_obj
-def importdemocourse(context: BaseComposeContext) -> None:
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    fmt.echo_info("Importing demo course")
-    jobs.import_demo_course(runner)
+@click.command(
+    help="DEPRECATED: Use 'tutor dev/local do importdemocourse' instead!",
+)
+@click.pass_context
+def importdemocourse(context: click.Context) -> None:
+    dev_or_local: str = context.parent.command.name  # type: ignore
+    fmt.echo_alert(
+        f"""'tutor {dev_or_local} importdemocourse' has been renamed to 'tutor {dev_or_local} do importdemocourse'.
+   'tutor {dev_or_local} importdemocourse' (without 'do') will stop working in a future release."""
+    )
+    config = tutor_config.load(context.obj.root)
+    runner = context.obj.job_runner(config)
+    jobs.run_task(runner, "importdemocourse")
 
 
 @click.command(
