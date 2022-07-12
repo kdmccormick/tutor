@@ -187,6 +187,17 @@ class Filters:
     #:   all be added as subcommands of the main ``tutor`` command.
     CLI_COMMANDS = filters.get("cli:commands")
 
+    #: List command line interface (CLI) tasks, which are added to the ``tutor ... do`` command subgroup.
+    #:
+    #: :parameter list[tuple[str, list[tuple[str, str]]]] tasks:
+    #:
+    #:   A list of (``task_name``, ``task_commands``) tuples. Each tuple describes a CLI task:
+    #:
+    #:    - ``task_name`` is the string used to invoke the task on the CLI, e.g. ``tutor local do <task_name>``
+    #:    - ``task_commands`` are a list of (``service``, ``command``) tuples. When the task
+    #:      is invoked, each shell ``command`` in the list will be run in its corresponding ``service``.
+    CLI_TASKS = filters.get("cli:tasks")
+
     #: Declare new default configuration settings that don't necessarily have to be saved in the user
     #: ``config.yml`` file. Default settings may be overridden with ``tutor config save --set=...``, in which
     #: case they will automatically be added to ``config.yml``.
