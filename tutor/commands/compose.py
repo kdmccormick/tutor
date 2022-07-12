@@ -10,6 +10,11 @@ from tutor import config as tutor_config
 from tutor import env as tutor_env
 from tutor import fmt, hooks, jobs, serialize, utils
 from tutor.commands.context import BaseJobContext
+from tutor.commands.tasks import (
+    RunTaskContextObject,
+    add_tasks_as_subcommands,
+    add_deprecated_task_alias,
+)
 from tutor.exceptions import TutorError
 from tutor.types import Config
 
@@ -296,79 +301,6 @@ def restart(context: BaseComposeContext, services: t.List[str]) -> None:
     context.job_runner(config).docker_compose(*command)
 
 
-@click.command(help="Initialise all applications")
-@click.option("-l", "--limit", help="Limit initialisation to this service or plugin")
-@mount_option
-@click.pass_obj
-def init(
-    context: BaseComposeContext,
-    limit: str,
-    mounts: t.Tuple[t.List[MountParam.MountType]],
-) -> None:
-    mount_tmp_volumes(mounts, context)
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    jobs.initialise(runner, limit_to=limit)
-
-
-@click.command(help="Create an Open edX user and interactively set their password")
-@click.option("--superuser", is_flag=True, help="Make superuser")
-@click.option("--staff", is_flag=True, help="Make staff user")
-@click.option(
-    "-p",
-    "--password",
-    help="Specify password from the command line. If undefined, you will be prompted to input a password",
-)
-@click.argument("name")
-@click.argument("email")
-@click.pass_obj
-def createuser(
-    context: BaseComposeContext,
-    superuser: str,
-    staff: bool,
-    password: str,
-    name: str,
-    email: str,
-) -> None:
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    command = jobs.create_user_command(superuser, staff, name, email, password=password)
-    runner.run_job("lms", command)
-
-
-@click.command(
-    help="Assign a theme to the LMS and the CMS. To reset to the default theme , use 'default' as the theme name."
-)
-@click.option(
-    "-d",
-    "--domain",
-    "domains",
-    multiple=True,
-    help=(
-        "Limit the theme to these domain names. By default, the theme is "
-        "applied to the LMS and the CMS, both in development and production mode"
-    ),
-)
-@click.argument("theme_name")
-@click.pass_obj
-def settheme(
-    context: BaseComposeContext, domains: t.List[str], theme_name: str
-) -> None:
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    domains = domains or jobs.get_all_openedx_domains(config)
-    jobs.set_theme(theme_name, domains, runner)
-
-
-@click.command(help="Import the demo course")
-@click.pass_obj
-def importdemocourse(context: BaseComposeContext) -> None:
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    fmt.echo_info("Importing demo course")
-    jobs.import_demo_course(runner)
-
-
 @click.command(
     short_help="Run a command in a new container",
     help=(
@@ -390,6 +322,38 @@ def run(
     if not utils.is_a_tty():
         extra_args.append("-T")
     context.invoke(dc_command, mounts=mounts, command="run", args=[*extra_args, *args])
+
+
+@click.group(
+    help="Run a predefined task in new containers",
+    subcommand_metavar="TASKNAME [ARGS] ...",
+)
+@click.pass_context
+@click.option(
+    "-l",
+    "--limit",
+    help="Limit scope of task execution. Valid values: lms, cms, mysql, or a plugin name.",
+)
+@mount_option
+def do(
+    context: click.Context, limit: str, mounts: t.Tuple[t.List[MountParam.MountType]]
+) -> None:
+    """
+    A command group for predefined tasks: `tutor (dev|local) do TASKNAME ARGS`
+    """
+    mount_tmp_volumes(mounts, context.obj)
+    context.obj = RunTaskContextObject(job_context=context.obj, limit_to=limit)
+
+
+@hooks.Actions.PLUGINS_LOADED.add()
+def _populate_do_after_plugins_loaded() -> None:
+    """
+    Dynamically populate the 'do' command group based on CLI_TASKS.
+
+    We do this after plugins are loaded to ensure that all plugins have had a chance
+    to add their entries to CLI_TASKS.
+    """
+    add_tasks_as_subcommands(do)
 
 
 @click.command(
@@ -562,14 +526,16 @@ def add_commands(command_group: click.Group) -> None:
     command_group.add_command(stop)
     command_group.add_command(restart)
     command_group.add_command(reboot)
-    command_group.add_command(init)
-    command_group.add_command(createuser)
-    command_group.add_command(importdemocourse)
-    command_group.add_command(settheme)
     command_group.add_command(dc_command)
     command_group.add_command(run)
+    command_group.add_command(do)
     command_group.add_command(copyfrom)
     command_group.add_command(bindmount_command)
     command_group.add_command(execute)
     command_group.add_command(logs)
     command_group.add_command(status)
+    prefix = "tutor (dev|local)"
+    add_deprecated_task_alias(command_group, prefix, do, "init")
+    add_deprecated_task_alias(command_group, prefix, do, "createuser")
+    add_deprecated_task_alias(command_group, prefix, do, "importdemocourse")
+    add_deprecated_task_alias(command_group, prefix, do, "settheme")

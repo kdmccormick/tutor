@@ -105,7 +105,8 @@ Tutor may not work if Docker is configured with < 4 GB RAM. Please follow instru
     context.invoke(compose.start, detach=True)
 
     click.echo(fmt.title("Database creation and migrations"))
-    context.invoke(compose.init)
+    do_init: click.Command = compose.do.get_command(context, "init")  # type: ignore
+    context.invoke(do_init)
 
     fmt.echo_info(
         """The Open edX platform is now running in detached mode

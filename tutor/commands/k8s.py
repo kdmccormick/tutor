@@ -8,9 +8,14 @@ from tutor import config as tutor_config
 from tutor import env as tutor_env
 from tutor import exceptions, fmt
 from tutor import interactive as interactive_config
-from tutor import jobs, serialize, utils
+from tutor import hooks, jobs, serialize, utils
 from tutor.commands.config import save as config_save_command
 from tutor.commands.context import BaseJobContext
+from tutor.commands.tasks import (
+    RunTaskContextObject,
+    add_tasks_as_subcommands,
+    add_deprecated_task_alias,
+)
 from tutor.commands.upgrade.k8s import upgrade_from
 from tutor.types import Config, get_typed
 
@@ -198,7 +203,8 @@ Press enter when you are ready to continue"""
     context.invoke(start)
 
     click.echo(fmt.title("Database creation and migrations"))
-    context.invoke(init, limit=None)
+    do_init: click.Command = do.get_command(context, "init")  # type: ignore
+    context.invoke(do_init)
 
     config = tutor_config.load(context.obj.root)
     fmt.echo_info(
@@ -264,6 +270,34 @@ def start(context: K8sContext, names: List[str]) -> None:
             )
 
 
+@click.group(
+    help="Run a predefined task in new containers",
+    subcommand_metavar="TASKNAME [ARGS] ...",
+)
+@click.pass_context
+@click.option(
+    "-l",
+    "--limit",
+    help="Limit scope of task execution. Valid values: lms, cms, mysql, or a plugin name.",
+)
+def do(context: click.Context, limit: str) -> None:
+    """
+    A command group for predefined tasks: `tutor k8s do TASKNAME ARGS`
+    """
+    context.obj = RunTaskContextObject(job_context=context.obj, limit_to=limit)
+
+
+@hooks.Actions.PLUGINS_LOADED.add()
+def _populate_do_after_plugins_loaded() -> None:
+    """
+    Dynamically populate the 'do' command group based on CLI_TASKS.
+
+    We do this after plugins are loaded to ensure that all plugins have had a chance
+    to add their entries to CLI_TASKS.
+    """
+    add_tasks_as_subcommands(do)
+
+
 @click.command(
     short_help="Stop a running platform",
     help=(
@@ -326,19 +360,6 @@ def delete(context: K8sContext, yes: bool) -> None:
     )
 
 
-@click.command(help="Initialise all applications")
-@click.option("-l", "--limit", help="Limit initialisation to this service or plugin")
-@click.pass_obj
-def init(context: K8sContext, limit: Optional[str]) -> None:
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    wait_for_deployment_ready(config, "caddy")
-    for name in ["elasticsearch", "mysql", "mongodb"]:
-        if tutor_config.is_service_activated(config, name):
-            wait_for_deployment_ready(config, name)
-    jobs.initialise(runner, limit_to=limit)
-
-
 @click.command(help="Scale the number of replicas of a given deployment")
 @click.argument("deployment")
 @click.argument("replicas", type=int)
@@ -355,64 +376,6 @@ def scale(context: K8sContext, deployment: str, replicas: int) -> None:
         f"--replicas={replicas}",
         f"deployment/{deployment}",
     )
-
-
-@click.command(help="Create an Open edX user and interactively set their password")
-@click.option("--superuser", is_flag=True, help="Make superuser")
-@click.option("--staff", is_flag=True, help="Make staff user")
-@click.option(
-    "-p",
-    "--password",
-    help="Specify password from the command line. If undefined, you will be prompted to input a password",
-    prompt=True,
-    hide_input=True,
-)
-@click.argument("name")
-@click.argument("email")
-@click.pass_obj
-def createuser(
-    context: K8sContext,
-    superuser: str,
-    staff: bool,
-    password: str,
-    name: str,
-    email: str,
-) -> None:
-    config = tutor_config.load(context.root)
-    command = jobs.create_user_command(superuser, staff, name, email, password=password)
-    runner = context.job_runner(config)
-    runner.run_job("lms", command)
-
-
-@click.command(help="Import the demo course")
-@click.pass_obj
-def importdemocourse(context: K8sContext) -> None:
-    fmt.echo_info("Importing demo course")
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    jobs.import_demo_course(runner)
-
-
-@click.command(
-    help="Assign a theme to the LMS and the CMS. To reset to the default theme , use 'default' as the theme name."
-)
-@click.option(
-    "-d",
-    "--domain",
-    "domains",
-    multiple=True,
-    help=(
-        "Limit the theme to these domain names. By default, the theme is "
-        "applied to the LMS and the CMS, both in development and production mode"
-    ),
-)
-@click.argument("theme_name")
-@click.pass_obj
-def settheme(context: K8sContext, domains: List[str], theme_name: str) -> None:
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    domains = domains or jobs.get_all_openedx_domains(config)
-    jobs.set_theme(theme_name, domains, runner)
 
 
 @click.command(
@@ -572,16 +535,19 @@ def k8s_namespace(config: Config) -> str:
 k8s.add_command(quickstart)
 k8s.add_command(start)
 k8s.add_command(stop)
+k8s.add_command(do)
 k8s.add_command(reboot)
 k8s.add_command(delete)
-k8s.add_command(init)
 k8s.add_command(scale)
-k8s.add_command(createuser)
-k8s.add_command(importdemocourse)
-k8s.add_command(settheme)
 k8s.add_command(exec_command)
 k8s.add_command(logs)
 k8s.add_command(wait)
 k8s.add_command(upgrade)
 k8s.add_command(apply_command)
 k8s.add_command(status)
+# TODO: we need to wait_for_pod_ready for caddy, elasticsearch, mysql, and mongodb
+add_deprecated_task_alias(k8s, "tutor k8s", do, "init")
+# TODO: make sure password prompting works in k8s createuser
+add_deprecated_task_alias(k8s, "tutor k8s", do, "createuser")
+add_deprecated_task_alias(k8s, "tutor k8s", do, "importdemocourse")
+add_deprecated_task_alias(k8s, "tutor k8s", do, "settheme")
