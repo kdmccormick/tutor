@@ -14,6 +14,16 @@ from .context import BaseJobContext
     subcommand_metavar="TASKNAME [ARGS] ...",
 )
 def do_command() -> None:
+    """
+    A command group for predefined tasks: `tutor (dev|local|k8s) do TASKNAME ARGS`
+
+    Subcommands will be populated dynamically based on the CLI_TASKS filter.
+    """
+    # TODO: We need to call process_mount_arguments here.
+    # Because that doesn't apply in k8s mode, we will probably need
+    # separate versions of do_command() for compose and k8s, although
+    # we can still use shared implementations for ``_add_tasks_to_do_command``
+    # as well as ``_run_task``.
     pass
 
 
@@ -31,17 +41,25 @@ hooks.Filters.CLI_TASKS.add_items(
 
 @hooks.Actions.PLUGINS_LOADED.add()
 def _add_tasks_to_do_command() -> None:
+    """
+    Dynamically populate the 'do' command group based on CLI_TASKS.
+
+    We do this after plugins are loaded to ensure that all plugins have had a chance
+    to add their entries to CLI_TASKS.
+    """
     tasks: t.Iterable[
         t.Tuple[str, str, t.List[t.Tuple[str, t.Tuple[str, ...]]]]
     ] = hooks.Filters.CLI_TASKS.iterate()
 
+    # Generate mapping of task names to helptexts.
+    # In the event that multiple CLI_TASKS entries have the same name,
+    # take the helptext of the first entry.
     task_name_helptext: t.Dict[str, str] = {}
     for name, helptext, _service_commands in tasks:
-        # In the event that CLI_TASKS returns multiple entries with the same
-        # name, take the helptext of the first entry.
         if name not in task_name_helptext:
             task_name_helptext[name] = helptext
 
+    # Add tasks as subcommands, in alphabetical order by name.
     for name, helptext in sorted(task_name_helptext.items()):
 
         @do_command.command(
@@ -57,6 +75,9 @@ def _add_tasks_to_do_command() -> None:
         def _do_task_command(
             context: BaseJobContext, limit: str, args: t.List[str]
         ) -> None:
+            """
+            Handle a particular 'do' subcommand invocation by running the corresponding task.
+            """
             config = tutor_config.load(context.root)
             runner = context.job_runner(config)
             run_task(runner=runner, name=name, limit_to=limit, args=args)

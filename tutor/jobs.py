@@ -48,12 +48,25 @@ def run_task(
     limit_to: str = "",
     args: t.Optional[t.List[str]] = None,
 ) -> None:
+    """
+    Run a task defined by CLI_TASKS within job containers.
+    """
+
+    # Execution may be limited to:
+    #   * a core app, specifically 'lms', 'cms', or 'mysql'; or
+    #   * any plugin.
+    # If limited, we will only run commands defined within that context.
     limited_context = hooks.Contexts.APP(limit_to).name if limit_to else None
     tasks: t.Iterable[
         t.Tuple[str, str, t.List[t.Tuple[str, t.Tuple[str, ...]]]]
     ] = hooks.Filters.CLI_TASKS.iterate(context=limited_context)
+
+    # In the unexpected case where a task has no handlers, fail loudly.
     if name not in set(task[0] for task in tasks):
         raise TutorError(f"No CLI_TASKS are defined for '{name}'")
+
+    # For each task, for each service/path handler, render the script at `path`
+    # and then run it in `service` and pass it any additional `args`.
     args_str = (" " + " ".join(args)) if args else ""
     for task_name, _task_helptext, task_service_commands in tasks:
         if task_name != name:
