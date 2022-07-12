@@ -304,26 +304,58 @@ def importdemocourse(context: BaseComposeContext) -> None:
     jobs.import_demo_course(runner)
 
 
-@click.command(help="Do a task")
-@click.argument("task_name")
-@click.pass_obj
-def do(context: BaseComposeContext, task_name: t.Optional[str]) -> None:
+# TODO: this doesn't work; we'd need to subclass both Dev and Local
+class ComposeDoContext(BaseComposeContext):
+    def __init__(self, root: str, task_options: t.Dict[str, t.Any]):
+        super().__init__(root)
+        self.task_options = task_options
+
+
+# @click.option(
+#    "--list", is_flag=True, default=False, help="List available tasks and exit."
+# )
+@click.group(help="Do a task", subcommand_metavar="TASKNAME [ARGS] ...")
+@click.pass_context
+def do(context: click.Context, **options: t.Dict[str, t.Any]) -> None:
+    context.obj = ComposeDoContext(root=context.obj.root, task_options=options)
+    _ = """
+    if options["list"]:
+        tasks: t.Iterable[
+            t.Tuple[str, t.List[t.Tuple[str, str]]]
+        ] = hooks.Filters.CLI_TASKS.iterate()
+        task_names = sorted(set(name for (name, _) in tasks))
+        fmt.echo_info("Available tasks:\n\t" + "\n\t".join(task_names))
+        raise click.Abort()
+    if task_name not in task_names:
+       raise TutorError(f"No such task: {task_name}")
+    """
+
+
+def _run_task(context: BaseComposeContext, task_name: str) -> None:
+    config = tutor_config.load(context.root)
+    runner = context.job_runner(config)
     tasks: t.Iterable[
         t.Tuple[str, t.List[t.Tuple[str, str]]]
     ] = hooks.Filters.CLI_TASKS.iterate()
-    task_names = sorted(set(name for (name, _) in tasks))
-    if task_name == "list":
-        fmt.echo_info("Available tasks:\n\t" + "\n\t".join(task_names))
-        return
-    if task_name not in task_names:
-        raise TutorError(f"No such task: {task_name}")
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
     for name, service_commands in tasks:
         if name != task_name:
             continue
         for service, command in service_commands:
             runner.run_job(service, command)
+
+
+@hooks.Actions.PLUGINS_LOADED.add()
+def _add_tasks_to_do_group() -> None:
+    tasks: t.Iterable[
+        t.Tuple[str, t.List[t.Tuple[str, str]]]
+    ] = hooks.Filters.CLI_TASKS.iterate()
+    task_names = sorted(set(name for (name, _) in tasks))
+    for task_name in task_names:
+
+        @do.command(name=task_name)
+        @click.pass_obj
+        def _run_the_task(context: ComposeDoContext) -> None:
+            _run_task(context, task_name)
 
 
 @click.command(
