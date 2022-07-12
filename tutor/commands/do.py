@@ -25,7 +25,7 @@ def _add_tasks_to_do_command() -> None:
 
     task_name_helptext: t.Dict[str, str] = {}
     for name, helptext, _service_commands in tasks:
-        # In the that CLI_TASKS returns multiple entries with the same
+        # In the event that CLI_TASKS returns multiple entries with the same
         # name, take the helptext of the first entry.
         if name not in task_name_helptext:
             task_name_helptext[name] = helptext
