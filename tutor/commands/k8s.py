@@ -11,6 +11,7 @@ from tutor import interactive as interactive_config
 from tutor import jobs, serialize, utils
 from tutor.commands.config import save as config_save_command
 from tutor.commands.context import BaseJobContext
+from tutor.commands.do import do_command
 from tutor.commands.upgrade.k8s import upgrade_from
 from tutor.types import Config, get_typed
 
@@ -572,6 +573,7 @@ def k8s_namespace(config: Config) -> str:
 k8s.add_command(quickstart)
 k8s.add_command(start)
 k8s.add_command(stop)
+k8s.add_command(do_command)
 k8s.add_command(reboot)
 k8s.add_command(delete)
 k8s.add_command(init)
