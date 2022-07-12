@@ -304,26 +304,36 @@ def importdemocourse(context: BaseComposeContext) -> None:
     jobs.import_demo_course(runner)
 
 
-@click.command(help="Do a task")
-@click.argument("task_name")
-@click.pass_obj
-def do(context: BaseComposeContext, task_name: t.Optional[str]) -> None:
+@click.group(help="Do a task", subcommand_metavar="TASKNAME [ARGS] ...")
+def do(context: click.Context, **options: t.Dict[str, t.Any]) -> None:
+    pass
+
+
+def _do_task(context: BaseComposeContext, task_name: str) -> None:
+    config = tutor_config.load(context.root)
+    runner = context.job_runner(config)
     tasks: t.Iterable[
         t.Tuple[str, t.List[t.Tuple[str, str]]]
     ] = hooks.Filters.CLI_TASKS.iterate()
-    task_names = sorted(set(name for (name, _) in tasks))
-    if task_name == "list":
-        fmt.echo_info("Available tasks:\n\t" + "\n\t".join(task_names))
-        return
-    if task_name not in task_names:
-        raise TutorError(f"No such task: {task_name}")
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
     for name, service_commands in tasks:
         if name != task_name:
             continue
         for service, command in service_commands:
             runner.run_job(service, command)
+
+
+@hooks.Actions.PLUGINS_LOADED.add()
+def _add_tasks_to_do_group() -> None:
+    tasks: t.Iterable[
+        t.Tuple[str, t.List[t.Tuple[str, str]]]
+    ] = hooks.Filters.CLI_TASKS.iterate()
+    task_names = sorted(set(name for (name, _) in tasks))
+    for task_name in task_names:
+
+        @do.command(name=task_name)
+        @click.pass_obj
+        def _do_task_command(context: ComposeDoContext) -> None:
+            _do_task(context, task_name)
 
 
 @click.command(
