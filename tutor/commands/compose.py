@@ -309,12 +309,15 @@ def do() -> None:
     pass
 
 
-def _do_task(context: BaseComposeContext, task_name: str) -> None:
+def _do_task(context: BaseJobContext, task_name: str, limit_to: str) -> None:
     config = tutor_config.load(context.root)
     runner = context.job_runner(config)
+
+    limited_context = hooks.Contexts.APP(limit_to).name if limit_to else None
     tasks: t.Iterable[
         t.Tuple[str, str, t.List[t.Tuple[str, str]]]
-    ] = hooks.Filters.CLI_TASKS.iterate()
+    ] = hooks.Filters.CLI_TASKS.iterate(context=limited_context)
+
     for name, _helptext, service_commands in tasks:
         if name != task_name:
             continue
@@ -328,20 +331,20 @@ def _add_tasks_to_do_group() -> None:
         t.Tuple[str, str, t.List[t.Tuple[str, str]]]
     ] = hooks.Filters.CLI_TASKS.iterate()
 
-    task_name_helptexts: t.Dict[str, str] = {}
+    task_name_helptext: t.Dict[str, str] = {}
     for name, helptext, _service_commands in tasks:
-        if name in task_name_helptexts:
-            # We want to take the first helptext for each task_name,
-            # so skip any additional ones that appear.
-            continue
-        task_name_helptexts[name] = helptext
+        # In the that CLI_TASKS returns multiple entries with the same
+        # name, take the helptext of the first entry.
+        if name not in task_name_helptext:
+            task_name_helptext[name] = helptext
 
-    for name, helptext in sorted(task_name_helptexts.items()):
+    for name, helptext in sorted(task_name_helptext.items()):
 
         @do.command(name=name, help=helptext)
         @click.pass_obj
-        def _do_task_command(context: BaseComposeContext) -> None:
-            _do_task(context, name)
+        @click.option("-l", "--limit", help="Limit initialisation to just this plugin")
+        def _do_task_command(context: BaseComposeContext, limit: str) -> None:
+            _do_task(context=context, task_name=name, limit_to=limit)
 
 
 @click.command(
