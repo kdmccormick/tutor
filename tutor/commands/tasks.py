@@ -8,25 +8,6 @@ from ..jobs import BaseJobRunner
 from .context import BaseJobContext
 
 
-@click.group(
-    name="do",
-    help="Run a predefined task in new containers",
-    subcommand_metavar="TASKNAME [ARGS] ...",
-)
-def do_command() -> None:
-    """
-    A command group for predefined tasks: `tutor (dev|local|k8s) do TASKNAME ARGS`
-
-    Subcommands will be populated dynamically based on the CLI_TASKS filter.
-    """
-    # TODO: We need to call process_mount_arguments here.
-    # Because that doesn't apply in k8s mode, we will probably need
-    # separate versions of do_command() for compose and k8s, although
-    # we can still use shared implementations for ``_add_tasks_to_do_command``
-    # as well as ``_run_task``.
-    pass
-
-
 # Add built-in tasks to CLI_TASKS.
 hooks.Filters.CLI_TASKS.add_items(
     [
@@ -39,13 +20,9 @@ hooks.Filters.CLI_TASKS.add_items(
 )
 
 
-@hooks.Actions.PLUGINS_LOADED.add()
-def _add_tasks_to_do_command() -> None:
+def add_tasks_as_subcommands(group: click.Group) -> None:
     """
-    Dynamically populate the 'do' command group based on CLI_TASKS.
-
-    We do this after plugins are loaded to ensure that all plugins have had a chance
-    to add their entries to CLI_TASKS.
+    Add tasks from CLI_TASKS as subcommands of the provided command group.
     """
     tasks: t.Iterable[
         t.Tuple[str, str, t.List[t.Tuple[str, t.Tuple[str, ...]]]]
@@ -62,7 +39,7 @@ def _add_tasks_to_do_command() -> None:
     # Add tasks as subcommands, in alphabetical order by name.
     for name, helptext in sorted(task_name_helptext.items()):
 
-        @do_command.command(
+        @group.command(
             name=name, help=helptext, context_settings={"ignore_unknown_options": True}
         )
         @click.pass_obj
@@ -80,10 +57,10 @@ def _add_tasks_to_do_command() -> None:
             """
             config = tutor_config.load(context.root)
             runner = context.job_runner(config)
-            _run_task(runner=runner, name=name, limit_to=limit, args=args)
+            run_task(runner=runner, name=name, limit_to=limit, args=args)
 
 
-def _run_task(
+def run_task(
     runner: BaseJobRunner,
     name: str,
     limit_to: str = "",

@@ -35,26 +35,6 @@ class JobsTests(unittest.TestCase):
         self.assertIn("set_password", command)
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_import_demo_course(self, mock_stdout: StringIO) -> None:
-        with temporary_root() as root:
-            context = TestContext(root)
-            config = tutor_config.load_full(root)
-            runner = context.job_runner(config)
-            jobs.import_demo_course(runner)
-
-            output = mock_stdout.getvalue()
-            service = re.search(r"Service: (\w*)", output)
-            commands = re.search(r"(-----)([\S\s]+)(-----)", output)
-            assert service is not None
-            assert commands is not None
-            self.assertEqual(service.group(1), "cms")
-            self.assertTrue(
-                commands.group(2)
-                .strip()
-                .startswith('echo "Loading settings $DJANGO_SETTINGS_MODULE"')
-            )
-
-    @patch("sys.stdout", new_callable=StringIO)
     def test_set_theme(self, mock_stdout: StringIO) -> None:
         with temporary_root() as root:
             context = TestContext(root)

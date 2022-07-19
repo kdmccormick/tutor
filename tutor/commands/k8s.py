@@ -8,10 +8,10 @@ from tutor import config as tutor_config
 from tutor import env as tutor_env
 from tutor import exceptions, fmt
 from tutor import interactive as interactive_config
-from tutor import jobs, serialize, utils
+from tutor import hooks, jobs, serialize, utils
 from tutor.commands.config import save as config_save_command
 from tutor.commands.context import BaseJobContext
-from tutor.commands.do import do_command
+from tutor.commands.tasks import add_tasks_as_subcommands
 from tutor.commands.upgrade.k8s import upgrade_from
 from tutor.types import Config, get_typed
 
@@ -265,6 +265,28 @@ def start(context: K8sContext, names: List[str]) -> None:
             )
 
 
+@click.group(
+    help="Run a predefined task in new containers",
+    subcommand_metavar="TASKNAME [ARGS] ...",
+)
+def do() -> None:
+    """
+    A command group for predefined tasks: `tutor k8s do TASKNAME ARGS`
+    """
+    pass
+
+
+@hooks.Actions.PLUGINS_LOADED.add()
+def _populate_do_after_plugins_loaded() -> None:
+    """
+    Dynamically populate the 'do' command group based on CLI_TASKS.
+
+    We do this after plugins are loaded to ensure that all plugins have had a chance
+    to add their entries to CLI_TASKS.
+    """
+    add_tasks_as_subcommands(do)
+
+
 @click.command(
     short_help="Stop a running platform",
     help=(
@@ -394,7 +416,7 @@ def importdemocourse(context: click.Context) -> None:
         """'tutor k8s importdemocourse' has been renamed to 'tutor k8s do importdemocourse'.
    'tutor k8s importdemocourse' (without 'do') will stop working in a future release."""
     )
-    do_importdemocourse: click.Command = do_command.get_command(context, "importdemocourse")  # type: ignore
+    do_importdemocourse: click.Command = do.get_command(context, "importdemocourse")  # type: ignore
     context.invoke(do_importdemocourse)
 
 
@@ -577,7 +599,7 @@ def k8s_namespace(config: Config) -> str:
 k8s.add_command(quickstart)
 k8s.add_command(start)
 k8s.add_command(stop)
-k8s.add_command(do_command)
+k8s.add_command(do)
 k8s.add_command(reboot)
 k8s.add_command(delete)
 k8s.add_command(init)
