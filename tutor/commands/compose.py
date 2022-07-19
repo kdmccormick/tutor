@@ -338,12 +338,20 @@ def run(
     help="Run a predefined task in new containers",
     subcommand_metavar="TASKNAME [ARGS] ...",
 )
+@click.pass_context
+@click.option(
+    "-l",
+    "--limit",
+    help="Limit scope of task execution. Valid values: lms, cms, mysql, or a plugin name.",
+)
 @mount_option
-def do(mounts: t.Tuple[t.List[MountParam.MountType]]) -> None:
+def do(
+    context: click.Context, limit: str, mounts: t.Tuple[t.List[MountParam.MountType]]
+) -> None:
     """
     A command group for predefined tasks: `tutor (dev|local) do TASKNAME ARGS`
     """
-    # Process mounts before handling any subcommand.
+    context.obj = context.obj, limit
     process_mount_arguments(mounts)
 
 

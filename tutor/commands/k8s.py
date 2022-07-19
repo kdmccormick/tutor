@@ -269,11 +269,17 @@ def start(context: K8sContext, names: List[str]) -> None:
     help="Run a predefined task in new containers",
     subcommand_metavar="TASKNAME [ARGS] ...",
 )
-def do() -> None:
+@click.pass_context
+@click.option(
+    "-l",
+    "--limit",
+    help="Limit scope of task execution. Valid values: lms, cms, mysql, or a plugin name.",
+)
+def do(context: click.Context, limit: str) -> None:
     """
     A command group for predefined tasks: `tutor k8s do TASKNAME ARGS`
     """
-    pass
+    context.obj = context.obj, limit
 
 
 @hooks.Actions.PLUGINS_LOADED.add()

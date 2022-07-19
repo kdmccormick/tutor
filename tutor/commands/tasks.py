@@ -43,21 +43,17 @@ def add_tasks_as_subcommands(group: click.Group) -> None:
             name=name, help=helptext, context_settings={"ignore_unknown_options": True}
         )
         @click.pass_obj
-        @click.option(
-            "-l",
-            "--limit",
-            help="Limit scope of task execution. Valid values: lms, cms, mysql, or a plugin name.",
-        )
         @click.argument("args", nargs=-1)
         def _do_subcommand(
-            context: BaseJobContext, limit: str, args: t.List[str]
+            context: t.Tuple[BaseJobContext, str], args: t.List[str]
         ) -> None:
             """
             Handle a particular 'do' subcommand invocation by running the corresponding task.
             """
-            config = tutor_config.load(context.root)
-            runner = context.job_runner(config)
-            run_task(runner=runner, name=name, limit_to=limit, args=args)
+            tutor_context, limit_to = context
+            config = tutor_config.load(tutor_context.root)
+            runner = tutor_context.job_runner(config)
+            run_task(runner=runner, name=name, limit_to=limit_to, args=args)
 
 
 def run_task(
