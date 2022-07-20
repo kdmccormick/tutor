@@ -105,10 +105,10 @@ def run_task(
 
     # For each task, for each service/path handler, render the script at `path`
     # and then run it in `service` and pass it any additional `args`.
-    args_str = (" " + " ".join(args)) if args else ""
+    args_str = " ".join(args or [])
     for name, _helptext, service_commands in tasks:
         if name != task_name:
             continue
         for service, path in service_commands:
             base_command = runner.render(*path)
-            runner.run_job(service, base_command + args_str)
+            runner.run_job(service, f"sh -c '{base_command}' -- {args_str}")
