@@ -8,16 +8,28 @@ from ..jobs import BaseJobRunner
 from .context import BaseJobContext
 
 
+class RunTaskContextObject:
+    """
+    A Click context object that bundles a Tutor BaseJobContext together with
+    any options (eg, limit_to) that need to passed down to the task subcommands.
+    """
+
+    def __init__(self, job_context: BaseJobContext, limit_to: str):
+        self.job_context = job_context
+        self.limit_to = limit_to
+
+
 # Add built-in tasks to CLI_TASKS.
-hooks.Filters.CLI_TASKS.add_items(
-    [
-        (
-            "importdemocourse",
-            "Import the demo course",
-            [("cms", ("hooks", "cms", "importdemocourse"))],
-        )
-    ]
-)
+with hooks.Contexts.APP("cms").enter():
+    hooks.Filters.CLI_TASKS.add_items(
+        [
+            (
+                "importdemocourse",
+                "Import the demo course",
+                [("cms", ("hooks", "cms", "importdemocourse"))],
+            )
+        ]
+    )
 
 
 def add_tasks_as_subcommands(group: click.Group) -> None:
@@ -44,16 +56,13 @@ def add_tasks_as_subcommands(group: click.Group) -> None:
         )
         @click.pass_obj
         @click.argument("args", nargs=-1)
-        def _do_subcommand(
-            context: t.Tuple[BaseJobContext, str], args: t.List[str]
-        ) -> None:
+        def _subcommand(obj: RunTaskContextObject, args: t.List[str]) -> None:
             """
-            Handle a particular 'do' subcommand invocation by running the corresponding task.
+            Handle a particular subcommand invocation by running the corresponding task.
             """
-            tutor_context, limit_to = context
-            config = tutor_config.load(tutor_context.root)
-            runner = tutor_context.job_runner(config)
-            run_task(runner=runner, name=name, limit_to=limit_to, args=args)
+            config = tutor_config.load(obj.job_context.root)
+            runner = obj.job_context.job_runner(config)
+            run_task(runner=runner, name=name, limit_to=obj.limit_to, args=args)
 
 
 def run_task(

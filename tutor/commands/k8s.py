@@ -11,7 +11,7 @@ from tutor import interactive as interactive_config
 from tutor import hooks, jobs, serialize, utils
 from tutor.commands.config import save as config_save_command
 from tutor.commands.context import BaseJobContext
-from tutor.commands.tasks import add_tasks_as_subcommands
+from tutor.commands.tasks import RunTaskContextObject, add_tasks_as_subcommands
 from tutor.commands.upgrade.k8s import upgrade_from
 from tutor.types import Config, get_typed
 
@@ -279,7 +279,7 @@ def do(context: click.Context, limit: str) -> None:
     """
     A command group for predefined tasks: `tutor k8s do TASKNAME ARGS`
     """
-    context.obj = context.obj, limit
+    context.obj = RunTaskContextObject(job_context=context.obj, limit_to=limit)
 
 
 @hooks.Actions.PLUGINS_LOADED.add()

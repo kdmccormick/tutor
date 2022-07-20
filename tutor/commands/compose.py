@@ -9,7 +9,7 @@ from tutor import config as tutor_config
 from tutor import env as tutor_env
 from tutor import fmt, hooks, jobs, serialize, utils
 from tutor.commands.context import BaseJobContext
-from tutor.commands.tasks import add_tasks_as_subcommands
+from tutor.commands.tasks import RunTaskContextObject, add_tasks_as_subcommands
 from tutor.exceptions import TutorError
 from tutor.types import Config
 
@@ -351,8 +351,8 @@ def do(
     """
     A command group for predefined tasks: `tutor (dev|local) do TASKNAME ARGS`
     """
-    context.obj = context.obj, limit
     process_mount_arguments(mounts)
+    context.obj = RunTaskContextObject(job_context=context.obj, limit_to=limit)
 
 
 @hooks.Actions.PLUGINS_LOADED.add()
