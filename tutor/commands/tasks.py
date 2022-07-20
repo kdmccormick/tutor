@@ -20,6 +20,16 @@ class RunTaskContextObject:
 
 
 # Add built-in tasks to CLI_TASKS.
+with hooks.Contexts.APP("lms").enter():
+    hooks.Filters.CLI_TASKS.add_items(
+        [
+            (
+                "createuser",
+                "Create and LMS user (TODO expand on this)",
+                [("lms", ("hooks", "lms", "createuser"))],
+            )
+        ]
+    )
 with hooks.Contexts.APP("cms").enter():
     hooks.Filters.CLI_TASKS.add_items(
         [
@@ -32,7 +42,7 @@ with hooks.Contexts.APP("cms").enter():
     )
 
 
-def add_tasks_as_subcommands(group: click.Group) -> None:
+def add_tasks_as_subcommands(command_group: click.Group) -> None:
     """
     Add tasks from CLI_TASKS as subcommands of the provided command group.
     """
@@ -50,19 +60,22 @@ def add_tasks_as_subcommands(group: click.Group) -> None:
 
     # Add tasks as subcommands, in alphabetical order by name.
     for name, helptext in sorted(task_name_helptext.items()):
-
-        @group.command(
+        command_group.command(
             name=name, help=helptext, context_settings={"ignore_unknown_options": True}
-        )
-        @click.pass_obj
-        @click.argument("args", nargs=-1)
-        def _subcommand(obj: RunTaskContextObject, args: t.List[str]) -> None:
-            """
-            Handle a particular subcommand invocation by running the corresponding task.
-            """
-            config = tutor_config.load(obj.job_context.root)
-            runner = obj.job_context.job_runner(config)
-            run_task(runner=runner, name=name, limit_to=obj.limit_to, args=args)
+        )(_handle_task_subcommand)
+
+
+@click.argument("args", nargs=-1)
+@click.pass_context
+def _handle_task_subcommand(context: click.Context, args: t.List[str]) -> None:
+    """
+    Handle a particular subcommand invocation by running the corresponding task.
+    """
+    obj: RunTaskContextObject = context.obj
+    task_name: str = context.info_name  # type: ignore
+    config = tutor_config.load(obj.job_context.root)
+    runner = obj.job_context.job_runner(config)
+    run_task(runner=runner, name=task_name, limit_to=obj.limit_to, args=args)
 
 
 def run_task(
@@ -83,6 +96,8 @@ def run_task(
     tasks: t.List[t.Tuple[str, str, t.List[t.Tuple[str, t.Tuple[str, ...]]]]] = list(
         hooks.Filters.CLI_TASKS.iterate(context=limited_context)
     )
+    breakpoint()
+    return
 
     # For each task, for each service/path handler, render the script at `path`
     # and then run it in `service` and pass it any additional `args`.
