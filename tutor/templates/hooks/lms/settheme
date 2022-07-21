@@ -1,0 +1,62 @@
+theme=""
+domains=()
+usage="usage: settheme THEME (--domain DOMAIN ...)+"
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-d|--domain)
+			if [ $# -lt 2 ]; then
+				echo "error: --domain specified but DOMAIN missing"
+				echo "$usage"
+				exit 1
+			fi
+			domains=($domains $2)
+			shift 2
+			;;
+		-*|--*)
+			echo "error: unrecognized option $1"
+			echo "$usage"
+			exit 1
+			;;
+		*)
+			if [ -z "$theme" ]; then
+				theme="$1"
+				shift
+			else
+				echo "error: too many arguments"
+				echo "$usage"
+				exit 1
+			fi
+	esac
+done
+if [ -z "$theme" ]; then
+	echo "error: must specify both USERNAME and EMAIL"
+	echo "$usage"
+	exit 1
+fi
+{% raw %}
+if ((${#domains[@]})); then
+{% endraw %}
+	echo "No domains supplied; nothing to do."
+	echo "$usage"
+	exit 0
+do
+code=""
+for domain in ${domains[@]}; do
+{% raw %}
+	if [ ${#domain} -gt 50 ]; then
+{% endraw %}
+		echo "Warning:"
+		echo "Assigning a theme to a site with a long (> 50 characters) domain name."
+        echo "The displayed site name will be truncated to 50 characters."
+	end
+	code="${code}\nprint('Assigning theme ${theme} to ${domain}...')"
+	code="${code}\nsite, _ = Site.objects.get_or_create(domain='${domain}')"
+	code="${code}\nif not site.name:"
+	code="${code}\n    name_max_length = Site._meta.get_field('name').max_length"
+	code="${code}\n    name = '${domain}'[:name_max_length]"
+	code="${code}\n    site.name = name"
+	code="${code}\n    site.save()"
+	code="${code}\nsite.themes.all().delete()"
+	code="${code}\nsite.themes.create(theme_dir_name='${theme}')"
+done
+./manage.py lms shell -c "$code"

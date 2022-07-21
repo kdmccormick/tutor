@@ -35,6 +35,22 @@ with hooks.Contexts.APP("lms").enter():
             )
         ]
     )
+    hooks.Filters.CLI_TASKS.add_items(
+        [
+            (
+                "settheme",
+                (
+                    "Assign a theme to the LMS and the CMS. "
+                    "To reset to the default theme, use 'default' as the theme name. "
+                    "Theme is limited to supplied domain names. "
+                    "By default, the theme is applied to the LMS and the CMS, "
+                    "both in development and production mode. "
+                    "Usage: setthem THEME (--domain DOMAIN)+"
+                ),
+                [("lms", ("hooks", "lms", "settheme"))],
+            )
+        ]
+    )
 with hooks.Contexts.APP("cms").enter():
     hooks.Filters.CLI_TASKS.add_items(
         [
