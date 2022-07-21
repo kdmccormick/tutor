@@ -1,13 +1,16 @@
-usage="Usage: createuser USERNAME EMAIL [--password PASSWORD] [--staff] [--superuser]"
-[ $# -gt 1 ] || (echo "$usage" && exit 1)
-username="$1"
-email="$2"
-shift 2
-password=""
 opts=""
+username=""
+email=""
+password=""
+usage="usage: createuser USERNAME EMAIL [--password PASSWORD] [--staff] [--superuser]"
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--password)
+			if [ $# -lt 2 ]; then
+				echo "error: --password specified but PASSWORD missing"
+				echo "$usage"
+				exit 1
+			fi
 			password="$2"
 			shift 2
 			;;
@@ -15,18 +18,37 @@ while [ $# -gt 0 ]; do
 			opts="$opts $1"
 			shift
 			;;
-		*)
-			echo usage
+		--*)
+			echo "error: unrecognized option $1"
+			echo "$usage"
 			exit 1
+			;;
+		*)
+			if [ -z "$username" ]; then
+				username="$1"
+				shift
+			elif [ -z "$email" ]; then
+				email="$1";
+				shift
+			else
+				echo "error: too many arguments"
+				echo "$usage"
+				exit 1
+			fi
 	esac
 done
+if [ -z "$username" ] || [ -z "$email" ]; then
+	echo "error: must specify both USERNAME and EMAIL"
+	echo "$usage"
+	exit 1
+fi
 ./manage.py lms manage_user $opts "$username" "$email"
 if [ -z "$password" ]; then
 	./manage.py lms changepassword "$username"
 else
 	./manage.py lms shell -c "\
-		from django.contrib.auth import get_user_model;\
-		u = get_user_model().get(username=${username});\
-		u.set_password('${password}');\
-		u.save()"
+from django.contrib.auth import get_user_model;\
+u = get_user_model().objects.get(username='${username}');\
+u.set_password('${password}');\
+u.save()"
 fi

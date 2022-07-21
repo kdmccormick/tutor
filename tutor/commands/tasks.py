@@ -1,3 +1,4 @@
+import shlex
 import typing as t
 
 import click
@@ -93,6 +94,7 @@ def run_task(
     """
     Run a task defined by CLI_TASKS within job containers.
     """
+    args = args or []
 
     # Execution may be limited to:
     #   * a core app, specifically 'lms', 'cms', or 'mysql'; or
@@ -105,10 +107,9 @@ def run_task(
 
     # For each task, for each service/path handler, render the script at `path`
     # and then run it in `service` and pass it any additional `args`.
-    args_str = " ".join(args or [])
     for name, _helptext, service_commands in tasks:
         if name != task_name:
             continue
         for service, path in service_commands:
-            base_command = runner.render(*path)
-            runner.run_job(service, f"sh -c '{base_command}' -- {args_str}")
+            command = shlex.join(["sh", "-c", runner.render(*path), "--", *args])
+            runner.run_job(service, command)

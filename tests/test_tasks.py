@@ -31,5 +31,5 @@ class BuiltinTaskTests(unittest.TestCase):
             self.assertTrue(
                 commands.group(2)
                 .strip()
-                .startswith('echo "Loading settings $DJANGO_SETTINGS_MODULE"')
+                .startswith('sh -c \'echo "Loading settings $DJANGO_SETTINGS_MODULE"')
             )
