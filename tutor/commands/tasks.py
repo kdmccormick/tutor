@@ -4,7 +4,7 @@ import typing as t
 import click
 
 from .. import config as tutor_config
-from .. import hooks
+from .. import fmt, hooks
 from ..jobs import BaseJobRunner
 from .context import BaseJobContext
 
@@ -26,7 +26,11 @@ with hooks.Contexts.APP("lms").enter():
         [
             (
                 "createuser",
-                "Create and LMS user (TODO expand on this)",
+                (
+                    "Create an Open edX user and set their password. "
+                    "If you do not supply a --password, you will be prompted for it. "
+                    "Usage: createuser USERNAME EMAIL [--password PASSWORD] [--staff] [--superuser]"
+                ),
                 [("lms", ("hooks", "lms", "createuser"))],
             )
         ]
@@ -113,3 +117,39 @@ def run_task(
         for service, path in service_commands:
             command = shlex.join(["sh", "-c", runner.render(*path), "--", *args])
             runner.run_job(service, command)
+
+
+def add_deprecated_task_alias(
+    parent_group: click.Group,
+    parent_command_text: str,  # TODO is there a less hacky way to do this?
+    do_group: click.Group,
+    task_name: str,
+) -> None:
+    """
+    TODO add docstring
+    """
+    old_command_spelling = f"{parent_command_text} {task_name}"
+    new_command_spelling = f"{parent_command_text} do {task_name}"
+
+    @parent_group.command(
+        name=task_name,
+        help=f"DEPRECATED: Use '{new_command_spelling}' instead!",
+        context_settings={"ignore_unknown_options": True},
+    )
+    @click.pass_context
+    @click.option(
+        "-l",
+        "--limit",
+        help="Limit scope of task execution. Valid values: lms, cms, mysql, or a plugin name.",
+    )
+    def _handle_deprecated_task_alias(
+        context: click.Context,
+        limit: str,
+    ) -> None:
+        do_task_command: click.Command = do_group.get_command(context, task_name)  # type: ignore
+        fmt.echo_alert(
+            f"""'{old_command_spelling}' has been renamed to '{new_command_spelling}'.
+   '{old_command_spelling}' (without 'do') will stop working in a future release."""
+        )
+        context.obj = RunTaskContextObject(job_context=context.obj, limit_to=limit)
+        context.invoke(do_task_command)

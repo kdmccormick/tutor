@@ -11,7 +11,11 @@ from tutor import interactive as interactive_config
 from tutor import hooks, jobs, serialize, utils
 from tutor.commands.config import save as config_save_command
 from tutor.commands.context import BaseJobContext
-from tutor.commands.tasks import RunTaskContextObject, add_tasks_as_subcommands
+from tutor.commands.tasks import (
+    RunTaskContextObject,
+    add_tasks_as_subcommands,
+    add_deprecated_task_alias,
+)
 from tutor.commands.upgrade.k8s import upgrade_from
 from tutor.types import Config, get_typed
 
@@ -386,46 +390,6 @@ def scale(context: K8sContext, deployment: str, replicas: int) -> None:
     )
 
 
-@click.command(help="Create an Open edX user and interactively set their password")
-@click.option("--superuser", is_flag=True, help="Make superuser")
-@click.option("--staff", is_flag=True, help="Make staff user")
-@click.option(
-    "-p",
-    "--password",
-    help="Specify password from the command line. If undefined, you will be prompted to input a password",
-    prompt=True,
-    hide_input=True,
-)
-@click.argument("name")
-@click.argument("email")
-@click.pass_obj
-def createuser(
-    context: K8sContext,
-    superuser: str,
-    staff: bool,
-    password: str,
-    name: str,
-    email: str,
-) -> None:
-    config = tutor_config.load(context.root)
-    command = jobs.create_user_command(superuser, staff, name, email, password=password)
-    runner = context.job_runner(config)
-    runner.run_job("lms", command)
-
-
-@click.command(
-    help="DEPRECATED: Use 'tutor k8s do importdemocourse' instead!",
-)
-@click.pass_context
-def importdemocourse(context: click.Context) -> None:
-    fmt.echo_alert(
-        """'tutor k8s importdemocourse' has been renamed to 'tutor k8s do importdemocourse'.
-   'tutor k8s importdemocourse' (without 'do') will stop working in a future release."""
-    )
-    do_importdemocourse: click.Command = do.get_command(context, "importdemocourse")  # type: ignore
-    context.invoke(do_importdemocourse)
-
-
 @click.command(
     help="Assign a theme to the LMS and the CMS. To reset to the default theme , use 'default' as the theme name."
 )
@@ -610,8 +574,6 @@ k8s.add_command(reboot)
 k8s.add_command(delete)
 k8s.add_command(init)
 k8s.add_command(scale)
-k8s.add_command(createuser)
-k8s.add_command(importdemocourse)
 k8s.add_command(settheme)
 k8s.add_command(exec_command)
 k8s.add_command(logs)
@@ -619,3 +581,6 @@ k8s.add_command(wait)
 k8s.add_command(upgrade)
 k8s.add_command(apply_command)
 k8s.add_command(status)
+# TODO: make sure password prompting works in k8s createuser
+add_deprecated_task_alias(k8s, "tutor k8s", do, "createuser")
+add_deprecated_task_alias(k8s, "tutor k8s", do, "importdemocourse")

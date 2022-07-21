@@ -33,3 +33,18 @@ class BuiltinTaskTests(unittest.TestCase):
                 .strip()
                 .startswith('sh -c \'echo "Loading settings $DJANGO_SETTINGS_MODULE"')
             )
+
+    # TODO: Update these tests so they work on new 'do createuser' task.
+    # def test_create_user_without_staff(self) -> None:
+    #    command = jobs.create_user_command("superuser", False, "username", "email")
+    #    self.assertNotIn("--staff", command)
+
+    # def test_create_user_with_staff(self) -> None:
+    #    command = jobs.create_user_command("superuser", True, "username", "email")
+    #    self.assertIn("--staff", command)
+
+    # def test_create_user_with_staff_with_password(self) -> None:
+    #    command = jobs.create_user_command(
+    #        "superuser", True, "username", "email", "command"
+    #    )
+    #    self.assertIn("set_password", command)

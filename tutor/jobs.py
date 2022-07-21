@@ -80,38 +80,6 @@ def initialise(runner: BaseJobRunner, limit_to: t.Optional[str] = None) -> None:
     fmt.echo_info("All services initialised.")
 
 
-def create_user_command(
-    superuser: str,
-    staff: bool,
-    username: str,
-    email: str,
-    password: t.Optional[str] = None,
-) -> str:
-    command = BASE_OPENEDX_COMMAND
-
-    opts = ""
-    if superuser:
-        opts += " --superuser"
-    if staff:
-        opts += " --staff"
-    command += """
-./manage.py lms manage_user {opts} {username} {email}
-"""
-    if password:
-        command += """
-./manage.py lms shell -c "from django.contrib.auth import get_user_model
-u = get_user_model().objects.get(username='{username}')
-u.set_password('{password}')
-u.save()"
-"""
-    else:
-        command += """
-./manage.py lms changepassword {username}
-"""
-
-    return command.format(opts=opts, username=username, email=email, password=password)
-
-
 def set_theme(
     theme_name: str, domain_names: t.List[str], runner: BaseJobRunner
 ) -> None:

@@ -20,20 +20,6 @@ class JobsTests(unittest.TestCase):
             self.assertTrue(output.startswith("Initialising all services..."))
             self.assertTrue(output.endswith("All services initialised."))
 
-    def test_create_user_command_without_staff(self) -> None:
-        command = jobs.create_user_command("superuser", False, "username", "email")
-        self.assertNotIn("--staff", command)
-
-    def test_create_user_command_with_staff(self) -> None:
-        command = jobs.create_user_command("superuser", True, "username", "email")
-        self.assertIn("--staff", command)
-
-    def test_create_user_command_with_staff_with_password(self) -> None:
-        command = jobs.create_user_command(
-            "superuser", True, "username", "email", "command"
-        )
-        self.assertIn("set_password", command)
-
     @patch("sys.stdout", new_callable=StringIO)
     def test_set_theme(self, mock_stdout: StringIO) -> None:
         with temporary_root() as root:
