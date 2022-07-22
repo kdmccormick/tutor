@@ -391,28 +391,6 @@ def scale(context: K8sContext, deployment: str, replicas: int) -> None:
 
 
 @click.command(
-    help="Assign a theme to the LMS and the CMS. To reset to the default theme , use 'default' as the theme name."
-)
-@click.option(
-    "-d",
-    "--domain",
-    "domains",
-    multiple=True,
-    help=(
-        "Limit the theme to these domain names. By default, the theme is "
-        "applied to the LMS and the CMS, both in development and production mode"
-    ),
-)
-@click.argument("theme_name")
-@click.pass_obj
-def settheme(context: K8sContext, domains: List[str], theme_name: str) -> None:
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    domains = domains or jobs.get_all_openedx_domains(config)
-    jobs.set_theme(theme_name, domains, runner)
-
-
-@click.command(
     name="exec",
     help="Execute a command in a pod of the given application",
     context_settings={"ignore_unknown_options": True},
@@ -574,7 +552,6 @@ k8s.add_command(reboot)
 k8s.add_command(delete)
 k8s.add_command(init)
 k8s.add_command(scale)
-k8s.add_command(settheme)
 k8s.add_command(exec_command)
 k8s.add_command(logs)
 k8s.add_command(wait)
@@ -584,3 +561,4 @@ k8s.add_command(status)
 # TODO: make sure password prompting works in k8s createuser
 add_deprecated_task_alias(k8s, "tutor k8s", do, "createuser")
 add_deprecated_task_alias(k8s, "tutor k8s", do, "importdemocourse")
+add_deprecated_task_alias(k8s, "tutor k8s", do, "settheme")

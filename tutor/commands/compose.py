@@ -252,30 +252,6 @@ def init(
 
 
 @click.command(
-    help="Assign a theme to the LMS and the CMS. To reset to the default theme , use 'default' as the theme name."
-)
-@click.option(
-    "-d",
-    "--domain",
-    "domains",
-    multiple=True,
-    help=(
-        "Limit the theme to these domain names. By default, the theme is "
-        "applied to the LMS and the CMS, both in development and production mode"
-    ),
-)
-@click.argument("theme_name")
-@click.pass_obj
-def settheme(
-    context: BaseComposeContext, domains: t.List[str], theme_name: str
-) -> None:
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    domains = domains or jobs.get_all_openedx_domains(config)
-    jobs.set_theme(theme_name, domains, runner)
-
-
-@click.command(
     short_help="Run a command in a new container",
     help=(
         "Run a command in a new container. This is a wrapper around `docker-compose run`. Any option or argument passed"
@@ -553,7 +529,6 @@ def add_commands(command_group: click.Group) -> None:
     command_group.add_command(restart)
     command_group.add_command(reboot)
     command_group.add_command(init)
-    command_group.add_command(settheme)
     command_group.add_command(dc_command)
     command_group.add_command(run)
     command_group.add_command(do)
@@ -562,7 +537,7 @@ def add_commands(command_group: click.Group) -> None:
     command_group.add_command(execute)
     command_group.add_command(logs)
     command_group.add_command(status)
-    add_deprecated_task_alias(command_group, "tutor (dev|local)", do, "createuser")
-    add_deprecated_task_alias(
-        command_group, "tutor (dev|local)", do, "importdemocourse"
-    )
+    prefix = "tutor (dev|local)"
+    add_deprecated_task_alias(command_group, prefix, do, "createuser")
+    add_deprecated_task_alias(command_group, prefix, do, "importdemocourse")
+    add_deprecated_task_alias(command_group, prefix, do, "settheme")

@@ -46,9 +46,10 @@ fi
 if [ -z "$password" ]; then
 	./manage.py lms changepassword "$username"
 else
-	./manage.py lms shell -c "\
-from django.contrib.auth import get_user_model;\
-u = get_user_model().objects.get(username='${username}');\
-u.set_password('${password}');\
+	code="\
+from django.contrib.auth import get_user_model
+u = get_user_model().objects.get(username='${username}')
+u.set_password('${password}')
 u.save()"
+	./manage.py lms shell -c "$code"
 fi

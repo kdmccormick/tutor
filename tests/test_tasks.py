@@ -48,3 +48,27 @@ class BuiltinTaskTests(unittest.TestCase):
     #        "superuser", True, "username", "email", "command"
     #    )
     #    self.assertIn("set_password", command)
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_set_theme(self, mock_stdout: StringIO) -> None:
+        with temporary_root() as root:
+            context = TestContext(root)
+            config = tutor_config.load_full(root)
+            runner = context.job_runner(config)
+            run_task(
+                runner,
+                "settheme",
+                args=["sample_theme", "-d", "domain1", "-d", "domain2"],
+            )
+
+            output = mock_stdout.getvalue()
+            service = re.search(r"Service: (\w*)", output)
+            commands = re.search(r"(-----)([\S\s]+)(-----)", output)
+            assert service is not None
+            assert commands is not None
+            self.assertEqual(service.group(1), "lms")
+            self.assertTrue(
+                commands.group(2)
+                .strip()
+                .startswith('sh -c \'theme=""\ndomains=""\nusage="')
+            )

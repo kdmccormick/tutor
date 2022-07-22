@@ -3,10 +3,6 @@ import typing as t
 from tutor import env, fmt, hooks
 from tutor.types import Config, get_typed
 
-BASE_OPENEDX_COMMAND = """
-echo "Loading settings $DJANGO_SETTINGS_MODULE"
-"""
-
 
 class BaseJobRunner:
     """
@@ -78,38 +74,6 @@ def initialise(runner: BaseJobRunner, limit_to: t.Optional[str] = None) -> None:
         runner.run_job_from_template(service, *path)
 
     fmt.echo_info("All services initialised.")
-
-
-def set_theme(
-    theme_name: str, domain_names: t.List[str], runner: BaseJobRunner
-) -> None:
-    """
-    For each domain, get or create a Site object and assign the selected theme.
-    """
-    if not domain_names:
-        return
-    python_code = "from django.contrib.sites.models import Site"
-    for domain_name in domain_names:
-        if len(domain_name) > 50:
-            fmt.echo_alert(
-                "Assigning a theme to a site with a long (> 50 characters) domain name."
-                " The displayed site name will be truncated to 50 characters."
-            )
-        python_code += """
-print('Assigning theme {theme_name} to {domain_name}...')
-site, _ = Site.objects.get_or_create(domain='{domain_name}')
-if not site.name:
-    name_max_length = Site._meta.get_field('name').max_length
-    name = '{domain_name}'[:name_max_length]
-    site.name = name
-    site.save()
-site.themes.all().delete()
-site.themes.create(theme_dir_name='{theme_name}')
-""".format(
-            theme_name=theme_name, domain_name=domain_name
-        )
-    command = BASE_OPENEDX_COMMAND + f'./manage.py lms shell -c "{python_code}"'
-    runner.run_job("lms", command)
 
 
 def get_all_openedx_domains(config: Config) -> t.List[str]:
