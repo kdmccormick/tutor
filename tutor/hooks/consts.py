@@ -104,6 +104,7 @@ class Filters:
             return items
     """
 
+    #: **DEPRECATED.** Use the ``"init"`` task in :py:data`CLI_TASKS` instead.
     #: List of commands to be executed during initialization. These commands typically
     #: include database migrations, setting feature flags, etc.
     #:
@@ -115,6 +116,7 @@ class Filters:
     #:       The command to execute will be read from that template, after it is rendered.
     COMMANDS_INIT = filters.get("commands:init")
 
+    #: **DEPRECATED.** Use the ``"pre-init"`` task in :py:data`CLI_TASKS` instead.
     #: List of commands to be executed prior to initialization. These commands are run even
     #: before the mysql databases are created and the migrations are applied.
     #:
