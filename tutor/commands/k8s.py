@@ -203,7 +203,8 @@ Press enter when you are ready to continue"""
     context.invoke(start)
 
     click.echo(fmt.title("Database creation and migrations"))
-    context.invoke(init, limit=None)
+    do_init: click.Command = do.get_command(context, "init")  # type: ignore
+    context.invoke(do_init)
 
     config = tutor_config.load(context.obj.root)
     fmt.echo_info(
@@ -357,19 +358,6 @@ def delete(context: K8sContext, yes: bool) -> None:
         "--ignore-not-found=true",
         "--wait",
     )
-
-
-@click.command(help="Initialise all applications")
-@click.option("-l", "--limit", help="Limit initialisation to this service or plugin")
-@click.pass_obj
-def init(context: K8sContext, limit: Optional[str]) -> None:
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    wait_for_deployment_ready(config, "caddy")
-    for name in ["elasticsearch", "mysql", "mongodb"]:
-        if tutor_config.is_service_activated(config, name):
-            wait_for_deployment_ready(config, name)
-    jobs.initialise(runner, limit_to=limit)
 
 
 @click.command(help="Scale the number of replicas of a given deployment")
@@ -550,7 +538,6 @@ k8s.add_command(stop)
 k8s.add_command(do)
 k8s.add_command(reboot)
 k8s.add_command(delete)
-k8s.add_command(init)
 k8s.add_command(scale)
 k8s.add_command(exec_command)
 k8s.add_command(logs)
@@ -558,6 +545,8 @@ k8s.add_command(wait)
 k8s.add_command(upgrade)
 k8s.add_command(apply_command)
 k8s.add_command(status)
+# TODO: we need to wait_for_pod_ready for caddy, elasticsearch, mysql, and mongodb
+add_deprecated_task_alias(k8s, "tutor k8s", do, "init")
 # TODO: make sure password prompting works in k8s createuser
 add_deprecated_task_alias(k8s, "tutor k8s", do, "createuser")
 add_deprecated_task_alias(k8s, "tutor k8s", do, "importdemocourse")

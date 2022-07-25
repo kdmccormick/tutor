@@ -14,6 +14,18 @@ class BuiltinTaskTests(unittest.TestCase):
     (ie, not plugin-defined tasks).
     """
 
+    # TODO: Update these tests so they work on new 'do init' task.
+    # @patch("sys.stdout", new_callable=StringIO)
+    # def test_initialise(self, mock_stdout: StringIO) -> None:
+    #     with temporary_root() as root:
+    #         context = TestContext(root)
+    #         config = tutor_config.load_full(root)
+    #         runner = context.job_runner(config)
+    #         jobs.initialise(runner)
+    #         output = mock_stdout.getvalue().strip()
+    #         self.assertTrue(output.startswith("Initialising all services..."))
+    #         self.assertTrue(output.endswith("All services initialised."))
+
     @patch("sys.stdout", new_callable=StringIO)
     def test_import_demo_course(self, mock_stdout: StringIO) -> None:
         with temporary_root() as root:

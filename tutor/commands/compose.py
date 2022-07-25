@@ -236,21 +236,6 @@ def restart(context: BaseComposeContext, services: t.List[str]) -> None:
     context.job_runner(config).docker_compose(*command)
 
 
-@click.command(help="Initialise all applications")
-@click.option("-l", "--limit", help="Limit initialisation to this service or plugin")
-@mount_option
-@click.pass_obj
-def init(
-    context: BaseComposeContext,
-    limit: str,
-    mounts: t.Tuple[t.List[MountParam.MountType]],
-) -> None:
-    process_mount_arguments(mounts)
-    config = tutor_config.load(context.root)
-    runner = context.job_runner(config)
-    jobs.initialise(runner, limit_to=limit)
-
-
 @click.command(
     short_help="Run a command in a new container",
     help=(
@@ -528,7 +513,6 @@ def add_commands(command_group: click.Group) -> None:
     command_group.add_command(stop)
     command_group.add_command(restart)
     command_group.add_command(reboot)
-    command_group.add_command(init)
     command_group.add_command(dc_command)
     command_group.add_command(run)
     command_group.add_command(do)
@@ -538,6 +522,7 @@ def add_commands(command_group: click.Group) -> None:
     command_group.add_command(logs)
     command_group.add_command(status)
     prefix = "tutor (dev|local)"
+    add_deprecated_task_alias(command_group, prefix, do, "init")
     add_deprecated_task_alias(command_group, prefix, do, "createuser")
     add_deprecated_task_alias(command_group, prefix, do, "importdemocourse")
     add_deprecated_task_alias(command_group, prefix, do, "settheme")

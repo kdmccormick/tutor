@@ -130,7 +130,8 @@ Press enter when you are ready to continue"""
     click.echo(fmt.title("Starting the platform in detached mode"))
     context.invoke(compose.start, mounts=mounts, detach=True)
     click.echo(fmt.title("Database creation and migrations"))
-    context.invoke(compose.init, mounts=mounts)
+    do_init: click.Command = compose.do.get_command(context, "init")  # type: ignore
+    context.invoke(do_init, mounts=mounts)
 
     config = tutor_config.load(context.obj.root)
     fmt.echo_info(
