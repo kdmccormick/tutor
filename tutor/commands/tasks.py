@@ -39,7 +39,7 @@ def _add_core_tasks() -> None:
                 (
                     "init",
                     "Initialise all applications.",
-                    [("lms", ("hooks", "lms", "init"))],
+                    [("lms", ("tasks", "lms", "init"))],
                 ),
                 (
                     "createuser",
@@ -48,7 +48,7 @@ def _add_core_tasks() -> None:
                         "If you do not supply a --password, you will be prompted for it. "
                         "Usage: createuser USERNAME EMAIL [--password PASSWORD] [--staff] [--superuser]"
                     ),
-                    [("lms", ("hooks", "lms", "createuser"))],
+                    [("lms", ("tasks", "lms", "createuser"))],
                 ),
                 (
                     "settheme",
@@ -60,7 +60,7 @@ def _add_core_tasks() -> None:
                         "both in development and production mode. "
                         "Usage: setthem THEME (--domain DOMAIN)+"
                     ),
-                    [("lms", ("hooks", "lms", "settheme"))],
+                    [("lms", ("tasks", "lms", "settheme"))],
                 ),
             ]
         )
@@ -70,12 +70,12 @@ def _add_core_tasks() -> None:
                 (
                     "init",
                     None,
-                    [("cms", ("hooks", "cms", "init"))],
+                    [("cms", ("tasks", "cms", "init"))],
                 ),
                 (
                     "importdemocourse",
                     "Import the demo course",
-                    [("cms", ("hooks", "cms", "importdemocourse"))],
+                    [("cms", ("tasks", "cms", "importdemocourse"))],
                 ),
             ]
         )
@@ -85,7 +85,7 @@ def _add_core_tasks() -> None:
                 (
                     "init",
                     None,
-                    [("mysql", ("hooks", "mysql", "init"))],
+                    [("mysql", ("tasks", "mysql", "init"))],
                 ),
             ],
         )
