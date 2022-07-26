@@ -18,7 +18,7 @@ class TestJobRunner(BaseJobRunner):
     separated by dashes.
     """
 
-    def run_job(self, service: str, command: str) -> int:
+    def run_task(self, service: str, command: str) -> int:
         print(os.linesep.join([f"Service: {service}", "-----", command, "----- "]))
         return 0
 

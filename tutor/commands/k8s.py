@@ -11,10 +11,10 @@ from tutor import interactive as interactive_config
 from tutor import hooks, jobs, serialize, utils
 from tutor.commands.config import save as config_save_command
 from tutor.commands.context import BaseJobContext
-from tutor.commands.tasks import (
-    RunTaskContextObject,
-    add_tasks_as_subcommands,
-    add_deprecated_task_alias,
+from tutor.commands.do import (
+    DoJobCommandContext,
+    add_jobs_as_subcommands,
+    add_deprecated_job_alias,
 )
 from tutor.commands.upgrade.k8s import upgrade_from
 from tutor.types import Config, get_typed
@@ -52,103 +52,116 @@ class K8sClients:
 
 
 class K8sJobRunner(jobs.BaseJobRunner):
-    def load_job(self, name: str) -> Any:
-        all_jobs = self.render("k8s", "jobs.yml")
-        for job in serialize.load_all(all_jobs):
-            job_name = job["metadata"]["name"]
-            if not isinstance(job_name, str):
-                raise exceptions.TutorError(
-                    f"Invalid job name: '{job_name}'. Expected str."
-                )
-            if job_name == name:
-                return job
-        raise exceptions.TutorError(f"Could not find job '{name}'")
+    """
+    Run tasks in a K8s deployment.
 
-    def active_job_names(self) -> List[str]:
+    Nomenclature note:
+
+      Recall that in Tutor, "jobs" are collections of "tasks", where
+      a "task" is a particular command to be run in a particular service.
+      However, what Tutor calls a "task", Kubernetes calls a "job".
+
+      So, in the context of this runner, one "Tutor job" will kick of one or more
+      "Tutor tasks" a.k.a. "K8s jobs".
+    """
+
+    def load_task(self, name: str) -> Any:
+        all_tasks = self.render("k8s", "jobs.yml")
+        for task in serialize.load_all(all_tasks):
+            task_name = task["metadata"]["name"]
+            if not isinstance(task_name, str):
+                raise exceptions.TutorError(
+                    f"Invalid task name: '{task_name}'. Expected str."
+                )
+            if task_name == name:
+                return task
+        raise exceptions.TutorError(f"Could not find task '{name}'")
+
+    def active_task_names(self) -> List[str]:
         """
-        Return a list of active job names
+        Return a list of active task names
         Docs:
         https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#list-job-v1-batch
         """
         api = K8sClients.instance().batch_api
         return [
-            job.metadata.name
-            for job in api.list_namespaced_job(k8s_namespace(self.config)).items
-            if job.status.active
+            task.metadata.name
+            for task in api.list_namespaced_job(k8s_namespace(self.config)).items
+            if task.status.active
         ]
 
-    def run_job(self, service: str, command: str) -> int:
-        job_name = f"{service}-job"
-        job = self.load_job(job_name)
-        # Create a unique job name to make it deduplicate jobs and make it easier to
-        # find later. Logs of older jobs will remain available for some time.
-        job_name += "-" + datetime.now().strftime("%Y%m%d%H%M%S")
+    def run_task(self, service: str, command: str) -> int:
+        task_name = f"{service}-job"
+        task = self.load_task(task_name)
+        # Create a unique task name to make it deduplicate tasks and make it easier to
+        # find later. Logs of older tasks will remain available for some time.
+        task_name += "-" + datetime.now().strftime("%Y%m%d%H%M%S")
 
-        # Wait until all other jobs are completed
+        # Wait until all other tasks are completed
         while True:
-            active_jobs = self.active_job_names()
-            if not active_jobs:
+            active_tasks = self.active_task_names()
+            if not active_tasks:
                 break
             fmt.echo_info(
-                f"Waiting for active jobs to terminate: {' '.join(active_jobs)}"
+                f"Waiting for active tasks to terminate: {' '.join(active_tasks)}"
             )
             sleep(5)
 
-        # Configure job
-        job["metadata"]["name"] = job_name
-        job["metadata"].setdefault("labels", {})
-        job["metadata"]["labels"]["app.kubernetes.io/name"] = job_name
+        # Configure task
+        task["metadata"]["name"] = task_name
+        task["metadata"].setdefault("labels", {})
+        task["metadata"]["labels"]["app.kubernetes.io/name"] = task_name
         # Define k8s entrypoint/args
         shell_command = ["sh", "-e", "-c"]
-        if job["spec"]["template"]["spec"]["containers"][0].get("command") == []:
+        if task["spec"]["template"]["spec"]["containers"][0].get("command") == []:
             # In some cases, we need to bypass the container entrypoint.
             # Unfortunately, AFAIK, there is no way to do so in K8s manifests. So we mark
-            # some jobs with "command: []". For these jobs, the entrypoint becomes "sh -e -c".
-            # We do not do this for every job, because some (most) entrypoints are actually useful.
-            job["spec"]["template"]["spec"]["containers"][0]["command"] = shell_command
+            # some tasks with "command: []". For these tasks, the entrypoint becomes "sh -e -c".
+            # We do not do this for every task, because some (most) entrypoints are actually useful.
+            task["spec"]["template"]["spec"]["containers"][0]["command"] = shell_command
             container_args = [command]
         else:
             container_args = shell_command + [command]
-        job["spec"]["template"]["spec"]["containers"][0]["args"] = container_args
-        job["spec"]["backoffLimit"] = 1
-        job["spec"]["ttlSecondsAfterFinished"] = 3600
-        # Save patched job to "jobs.yml" file
+        task["spec"]["template"]["spec"]["containers"][0]["args"] = container_args
+        task["spec"]["backoffLimit"] = 1
+        task["spec"]["ttlSecondsAfterFinished"] = 3600
+        # Save patched task to "jobs.yml" file
         with open(
             tutor_env.pathjoin(self.root, "k8s", "jobs.yml"), "w", encoding="utf-8"
-        ) as job_file:
-            serialize.dump(job, job_file)
-        # We cannot use the k8s API to create the job: configMap and volume names need
+        ) as task_file:
+            serialize.dump(task, task_file)
+        # We cannot use the k8s API to create the task: configMap and volume names need
         # to be found with the right suffixes.
         kubectl_apply(
             self.root,
             "--selector",
-            f"app.kubernetes.io/name={job_name}",
+            f"app.kubernetes.io/name={task_name}",
         )
 
         message = (
-            "Job {job_name} is running. To view the logs from this job, run:\n\n"
+            "Task {task_name} is running. To view the logs from this task, run:\n\n"
             """    kubectl logs --namespace={namespace} --follow $(kubectl get --namespace={namespace} pods """
-            """--selector=job-name={job_name} -o=jsonpath="{{.items[0].metadata.name}}")\n\n"""
-            "Waiting for job completion..."
-        ).format(job_name=job_name, namespace=k8s_namespace(self.config))
+            """--selector=job-name={task_name} -o=jsonpath="{{.items[0].metadata.name}}")\n\n"""
+            "Waiting for task completion..."
+        ).format(task_name=task_name, namespace=k8s_namespace(self.config))
         fmt.echo_info(message)
 
         # Wait for completion
-        field_selector = f"metadata.name={job_name}"
+        field_selector = f"metadata.name={task_name}"
         while True:
-            namespaced_jobs = K8sClients.instance().batch_api.list_namespaced_job(
+            namespaced_tasks = K8sClients.instance().batch_api.list_namespaced_job(
                 k8s_namespace(self.config), field_selector=field_selector
             )
-            if not namespaced_jobs.items:
+            if not namespaced_tasks.items:
                 continue
-            job = namespaced_jobs.items[0]
-            if not job.status.active:
-                if job.status.succeeded:
-                    fmt.echo_info(f"Job {job_name} successful.")
+            task = namespaced_tasks.items[0]
+            if not task.status.active:
+                if task.status.succeeded:
+                    fmt.echo_info(f"Task {task_name} successful.")
                     break
-                if job.status.failed:
+                if task.status.failed:
                     raise exceptions.TutorError(
-                        f"Job {job_name} failed. View the job logs to debug this issue."
+                        f"Task {task_name} failed. View the task logs to debug this issue."
                     )
             sleep(5)
         return 0
@@ -270,34 +283,6 @@ def start(context: K8sContext, names: List[str]) -> None:
             )
 
 
-@click.group(
-    help="Run a predefined task in new containers",
-    subcommand_metavar="TASKNAME [ARGS] ...",
-)
-@click.pass_context
-@click.option(
-    "-l",
-    "--limit",
-    help="Limit scope of task execution. Valid values: lms, cms, mysql, or a plugin name.",
-)
-def do(context: click.Context, limit: str) -> None:
-    """
-    A command group for predefined tasks: `tutor k8s do TASKNAME ARGS`
-    """
-    context.obj = RunTaskContextObject(job_context=context.obj, limit_to=limit)
-
-
-@hooks.Actions.PLUGINS_LOADED.add()
-def _populate_do_after_plugins_loaded() -> None:
-    """
-    Dynamically populate the 'do' command group based on CLI_TASKS.
-
-    We do this after plugins are loaded to ensure that all plugins have had a chance
-    to add their entries to CLI_TASKS.
-    """
-    add_tasks_as_subcommands(do)
-
-
 @click.command(
     short_help="Stop a running platform",
     help=(
@@ -376,6 +361,34 @@ def scale(context: K8sContext, deployment: str, replicas: int) -> None:
         f"--replicas={replicas}",
         f"deployment/{deployment}",
     )
+
+
+@click.group(
+    help="Run a predefined job in new containers",
+    subcommand_metavar="JOBNAME [ARGS] ...",
+)
+@click.pass_context
+@click.option(
+    "-l",
+    "--limit",
+    help="Limit scope of job execution. Valid values: lms, cms, mysql, or a plugin name.",
+)
+def do(context: click.Context, limit: str) -> None:
+    """
+    A command group for predefined jobs: `tutor k8s do JOBNAME ARGS`
+    """
+    context.obj = DoJobCommandContext(job_context=context.obj, limit_to=limit)
+
+
+@hooks.Actions.PLUGINS_LOADED.add()
+def _populate_do_after_plugins_loaded() -> None:
+    """
+    Dynamically populate the 'do' command group based on the `JOB_*` filters.
+
+    We do this after plugins are loaded to ensure that all plugins have had a chance
+    to add their entries to the `JOB_*` filters.
+    """
+    add_jobs_as_subcommands(do)
 
 
 @click.command(
@@ -535,10 +548,10 @@ def k8s_namespace(config: Config) -> str:
 k8s.add_command(quickstart)
 k8s.add_command(start)
 k8s.add_command(stop)
-k8s.add_command(do)
 k8s.add_command(reboot)
 k8s.add_command(delete)
 k8s.add_command(scale)
+k8s.add_command(do)
 k8s.add_command(exec_command)
 k8s.add_command(logs)
 k8s.add_command(wait)
@@ -546,8 +559,8 @@ k8s.add_command(upgrade)
 k8s.add_command(apply_command)
 k8s.add_command(status)
 # TODO: we need to wait_for_pod_ready for caddy, elasticsearch, mysql, and mongodb
-add_deprecated_task_alias(k8s, "tutor k8s", do, "init")
+add_deprecated_job_alias(k8s, "tutor k8s", do, "init")
 # TODO: make sure password prompting works in k8s createuser
-add_deprecated_task_alias(k8s, "tutor k8s", do, "createuser")
-add_deprecated_task_alias(k8s, "tutor k8s", do, "importdemocourse")
-add_deprecated_task_alias(k8s, "tutor k8s", do, "settheme")
+add_deprecated_job_alias(k8s, "tutor k8s", do, "createuser")
+add_deprecated_job_alias(k8s, "tutor k8s", do, "importdemocourse")
+add_deprecated_job_alias(k8s, "tutor k8s", do, "settheme")

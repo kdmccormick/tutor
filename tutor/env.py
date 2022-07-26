@@ -26,6 +26,7 @@ def _prepare_environment() -> None:
         [
             ("apps/", ""),
             ("build/", ""),
+            ("tasks/", ""),
             ("dev/", ""),
             ("k8s/", ""),
             ("local/", ""),

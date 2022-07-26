@@ -10,10 +10,10 @@ from tutor import config as tutor_config
 from tutor import env as tutor_env
 from tutor import fmt, hooks, jobs, serialize, utils
 from tutor.commands.context import BaseJobContext
-from tutor.commands.tasks import (
-    RunTaskContextObject,
-    add_tasks_as_subcommands,
-    add_deprecated_task_alias,
+from tutor.commands.do import (
+    DoJobCommandContext,
+    add_jobs_as_subcommands,
+    add_deprecated_job_alias,
 )
 from tutor.exceptions import TutorError
 from tutor.types import Config
@@ -85,7 +85,7 @@ class ComposeJobRunner(jobs.BaseComposeJobRunner):
             docker_compose_jobs_tmp_path,
         )
 
-    def run_job(self, service: str, command: str) -> int:
+    def run_task(self, service: str, command: str) -> int:
         """
         Run the "{{ service }}-job" service from local/docker-compose.jobs.yml with the
         specified command.
@@ -301,6 +301,38 @@ def restart(context: BaseComposeContext, services: t.List[str]) -> None:
     context.job_runner(config).docker_compose(*command)
 
 
+@click.group(
+    help="Run a predefined job in new containers",
+    subcommand_metavar="JOBNAME [ARGS] ...",
+)
+@click.pass_context
+@click.option(
+    "-l",
+    "--limit",
+    help="Limit scope of job execution. Valid values: lms, cms, mysql, or a plugin name.",
+)
+@mount_option
+def do(
+    context: click.Context, limit: str, mounts: t.Tuple[t.List[MountParam.MountType]]
+) -> None:
+    """
+    A command group for predefined jobs: `tutor (dev|local) do JOBNAME ARGS`
+    """
+    mount_tmp_volumes(mounts, context.obj)
+    context.obj = DoJobCommandContext(job_context=context.obj, limit_to=limit)
+
+
+@hooks.Actions.PLUGINS_LOADED.add()
+def _populate_do_after_plugins_loaded() -> None:
+    """
+    Dynamically populate the 'do' command group based on the `JOB_*` filters.
+
+    We do this after plugins are loaded to ensure that all plugins have had a chance
+    to add their entries to the `JOB_*` filters.
+    """
+    add_jobs_as_subcommands(do)
+
+
 @click.command(
     short_help="Run a command in a new container",
     help=(
@@ -322,38 +354,6 @@ def run(
     if not utils.is_a_tty():
         extra_args.append("-T")
     context.invoke(dc_command, mounts=mounts, command="run", args=[*extra_args, *args])
-
-
-@click.group(
-    help="Run a predefined task in new containers",
-    subcommand_metavar="TASKNAME [ARGS] ...",
-)
-@click.pass_context
-@click.option(
-    "-l",
-    "--limit",
-    help="Limit scope of task execution. Valid values: lms, cms, mysql, or a plugin name.",
-)
-@mount_option
-def do(
-    context: click.Context, limit: str, mounts: t.Tuple[t.List[MountParam.MountType]]
-) -> None:
-    """
-    A command group for predefined tasks: `tutor (dev|local) do TASKNAME ARGS`
-    """
-    mount_tmp_volumes(mounts, context.obj)
-    context.obj = RunTaskContextObject(job_context=context.obj, limit_to=limit)
-
-
-@hooks.Actions.PLUGINS_LOADED.add()
-def _populate_do_after_plugins_loaded() -> None:
-    """
-    Dynamically populate the 'do' command group based on CLI_TASKS.
-
-    We do this after plugins are loaded to ensure that all plugins have had a chance
-    to add their entries to CLI_TASKS.
-    """
-    add_tasks_as_subcommands(do)
 
 
 @click.command(
@@ -527,15 +527,15 @@ def add_commands(command_group: click.Group) -> None:
     command_group.add_command(restart)
     command_group.add_command(reboot)
     command_group.add_command(dc_command)
-    command_group.add_command(run)
     command_group.add_command(do)
+    command_group.add_command(run)
     command_group.add_command(copyfrom)
     command_group.add_command(bindmount_command)
     command_group.add_command(execute)
     command_group.add_command(logs)
     command_group.add_command(status)
     prefix = "tutor (dev|local)"
-    add_deprecated_task_alias(command_group, prefix, do, "init")
-    add_deprecated_task_alias(command_group, prefix, do, "createuser")
-    add_deprecated_task_alias(command_group, prefix, do, "importdemocourse")
-    add_deprecated_task_alias(command_group, prefix, do, "settheme")
+    add_deprecated_job_alias(command_group, prefix, do, "init")
+    add_deprecated_job_alias(command_group, prefix, do, "createuser")
+    add_deprecated_job_alias(command_group, prefix, do, "importdemocourse")
+    add_deprecated_job_alias(command_group, prefix, do, "settheme")

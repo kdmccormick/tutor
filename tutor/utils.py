@@ -202,7 +202,7 @@ def is_a_tty() -> bool:
 
 
 def execute(*command: str) -> int:
-    click.echo(fmt.command(_shlex_join(*command)))
+    click.echo(fmt.command(shlex_join(*command)))
     with subprocess.Popen(command) as p:
         try:
             result = p.wait(timeout=None)
@@ -221,7 +221,7 @@ def execute(*command: str) -> int:
     return result
 
 
-def _shlex_join(*split_command: str) -> str:
+def shlex_join(*split_command: str) -> str:
     """
     Return a shell-escaped string from *split_command.
 
