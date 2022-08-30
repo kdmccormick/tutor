@@ -18,6 +18,8 @@ Every user-facing change should have an entry in this changelog. Please respect 
 
 ## Unreleased
 
+- [Feature] Folders named `xblock-*` or `platform-plugin-*` can be passed to `-m/--mount` to be automatically mounted under `/openedx/packages` in all edx-platform containers. (@kdmccormick)
+- [Feature] Folders named `venv-<service>` can be passed to `-m/--mount` to be automatically mounted as virtual environments in all relevant service containers. (@kdmccormick)
 - [Feature] Upgrade edx-platform i18n strings to nutmeg.2 (by @regisb).
 
 ## v14.0.5 (2022-08-29)

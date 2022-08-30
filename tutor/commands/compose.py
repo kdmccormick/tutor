@@ -536,6 +536,19 @@ def dc_command(
     context.job_runner(config).docker_compose(command, *volume_args, *non_volume_args)
 
 
+# These services all run edx-platform code.
+# When handling an auto-mount for edx-platform or a related folder,
+# we should bind-mount said folder to all of these services.
+_EDX_PLATFORM_MOUNT_SERVICES = [
+    "lms",
+    "lms-worker",
+    "lms-job",
+    "cms",
+    "cms-worker",
+    "cms-job",
+]
+
+
 @hooks.Filters.COMPOSE_MOUNTS.add()
 def _mount_edx_platform(
     volumes: t.List[t.Tuple[str, str]], name: str
@@ -545,15 +558,65 @@ def _mount_edx_platform(
     repo in the lms/cms containers.
     """
     if name == "edx-platform":
-        path = "/openedx/edx-platform"
-        volumes += [
-            ("lms", path),
-            ("cms", path),
-            ("lms-worker", path),
-            ("cms-worker", path),
-            ("lms-job", path),
-            ("cms-job", path),
-        ]
+        for service in _EDX_PLATFORM_MOUNT_SERVICES:
+            volumes.append((service, "/openedx/edx-platform"))
+    return volumes
+
+
+@hooks.Filters.COMPOSE_MOUNTS.add()
+def _mount_edx_platform_packages(
+    volumes: t.List[t.Tuple[str, str]], name: str
+) -> t.List[t.Tuple[str, str]]:
+    """
+    Auto-mount edx-platform packages to /openedx/packages.
+
+    Some (not all) edx-platform libraries & plugins follow consistent
+    naming schemes. For those that do, we allow Tutor users to auto-mount
+    them to edx-platform containers under /openedx/packages. For example:
+
+      tutor dev start -m xblock-adventure -m platform-plugin-notices
+
+    will mount both those packages in all edx-platform containers.
+    """
+    known_package_prefixes = ["xblock-", "platform-plugin-"]
+    for prefix in known_package_prefixes:
+        if name.startswith(prefix):
+            for service in _EDX_PLATFORM_MOUNT_SERVICES:
+                volumes.append((service, f"/openedx/packages/{name}"))
+            break
+    return volumes
+
+
+@hooks.Filters.COMPOSE_MOUNTS.add()
+def _mount_venvs(
+    volumes: t.List[t.Tuple[str, str]], name: str
+) -> t.List[t.Tuple[str, str]]:
+    """
+    Auto-mount virtual environments to their logical containers.
+
+    If the given folder (`name`) is in the form "venv-<service>",
+    then mount it at /openedx/venv in <service> as well as <service>-job.
+    In the special case of "venv-openedx", mount the folder at /openedx/venv
+    for both lms & cms, as well as their -worker variants and their -job variants.
+    A downstream Compose error will raise if <service> is not a valid service.
+    For example:
+
+      tutor dev start -m venvs/venv-openedx -m venvs/venv-discovery
+
+    will mount venv-openedx in all edx-plaform-related containers and
+    will mount venv-discovery in the discovery and discovery-job containers.
+    """
+    if name.startswith("venv-"):
+        path = "/openedx/venv"
+        service = name.split("venv-")[1]
+        if service == "openedx":
+            for service in _EDX_PLATFORM_MOUNT_SERVICES:
+                volumes.append((service, path))
+        else:
+            volumes += [
+                (service, path),
+                (f"{service}-job", path),
+            ]
     return volumes
 
 
