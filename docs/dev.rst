@@ -136,32 +136,68 @@ This means: *Start Open edX, with the host directory* **source/of/myfolder** *au
 
 Now, if you ran this literal command, Tutor would tell you that it didn't know where to mount **myfolder**. As you will see below, though, there are several folders that Tutor *does* know how to automatically mount for you.
 
+Example
+^^^^^^^
 
-Mounting application code
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Assuming your Open edX repositories are located within ``~/code``, to run a Django shell in the CMS container with your copy of edx-platform mounted, you could run either of these commands::
 
-Assuming your Open edX repositories are located within ``~/code``, to run a shell in the LMS container with your copy of edx-platform mounted, you would run::
+    # Implicit version
+    tutor dev run -m ~/code/edx-platform cms ./manage.py cms shell
 
+    # Explicit version
+    tutor dev run \
+        --mount=lms:~/code/edx-platform:/openedx/edx-platform
+        cms ./manage.py cms shell
+
+.. _edx_platform_dev_env:
+
+Setting up a development environment for edx-platform
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Now that you understand ``--mount``, we can tell Tutor to run a fork of edx-platform from your host. We will assume that your code is located on your host at ``~/code/edx-platform``, although this is not a requirement for development.
+
+First of all, make sure that you are working off the latest release tag (unless you are running the Tutor :ref:`nightly <nightly>` branch). See the :ref:`fork edx-platform section <edx_platform_fork>` for more information.
+
+Then, you should run the following commands::
+
+    # Run bash in the lms container
     tutor dev run --mount=~/code/edx-platform lms bash
 
-Similarly, to (re-)start the platform with your copy of edx-platform mounted, you would run::
+    # Run edx-platform's setup.py
+    pip install -e .
+
+    # Install nodejs packages into node_modules/
+    npm install
+
+    # Rebuild static assets
+    openedx-assets build --env=dev
+
+    # Exit the lms container
+    exit
+
+.. hint:: This can also be done in one single, long command: ``tutor dev run -m ~/code/edx-platform lms bash -c 'pip install -e . && npm i && openedx-assets build --env=dev'``
+
+After running all these commands, your edx-platform repository will be ready for local development. To debug a local edx-platform repository, you can then add a `python breakpoint <https://docs.python.org/3/library/functions.html#breakpoint>`__ with ``breakpoint()`` anywhere in your code and run::
+
+    tutor dev start --mount=~/edx-platform lms
+
+The default debugger is ``ipdb.set_trace``. ``PYTHONBREAKPOINT`` can be modified by setting an environment variable in the Docker imamge.
+
+If LMS isn't running, this will start it in your terminal. If an LMS container is already running background, this command will stop it, recreate it, and attach your terminal to it. Later, to detach your terminal without stopping the container, just hit ``Ctrl+z``. 
+
+Every time you run ``tutor dev start``, your platform is updated to match the ``--mount`` options that were provided, if any. In other words, the latest invocation of ``start`` "wins" when determining what should be mounted. So, to re-start the platform *without* your fork edx-platform mounted, simply run::
+
+    tutor dev start
+
+and to re-start it again *with* your fork mounted, run::
 
     tutor dev start --mount=~/code/edx-platform
 
-Both of the above commands are using the implicit form of the ``--mount`` option. The equivalent ``start`` command using the explicit form would be::
-
-    tutor dev start --mount=lms,lms-worker,lms-job,cms,cms-worker,cms-job:~/code/edx-platform:/openedx/edx-platform
-
-As you can see, it would be cumbersome to explicitly mount edx-platform in all the right service containers!
-
-Many plugins add extra services to Tutor, and many of those plugins let you mount the associated repositories implicitly. Furthermore, you can use the ``-m/--mount`` option multiple times in one command. So, if you were using both the tutor-discovery and tutor-mfe plugins, and wanted to start Open edX with several different application repositories mounted, you might write::
-
-    tutor dev start -m ~/code/edx-platform -m ~/code/course-discovery -m ~/code/frontend-app-learning
 
 Mounting virtual environments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If your modifications *do not affect an application's Python requirements*, then mounting just the application repository will be enough for the purposes of previewing and debugging. That is because the Python virtual environment build into the container image will have all the correct packages installed.
+If your modifications *do not affect an application's Python requirements*, then mounting & preparing the application repository as described above will be enough for the purposes of previewing and debugging. That is because the Python virtual environment build into the container image will have all the correct packages installed.
 
 On the other hand, if your modifications require that Python packages to be added, removed, upgraded, or downgraded, then you will also want to **mount a local Python virtual environment**.
 
@@ -173,7 +209,7 @@ First, copy an existing virtual environment from a service container whose requi
 Then, install Python requirements, with your modified repository and new local virtual environment both mounted::
 
     tutor dev run --mount=~/code/edx-platform --mount=~/venv-openedx lms \
-        bash -c 'pip install -r requirements/edx/development.txt'
+        pip install -r requirements/edx/development.txt
 
 .. note:: If you further modify Python requirements in the future, run this command again.
 
@@ -183,28 +219,25 @@ Finally, you can (re-) start Open edX using your mounted code and virtual enviro
 
 .. note:: The packages in your local virtual environment will persist, even after containers are stopped.
 
-**That's it!** By the way, did you notice that we're using the implicit form of ``--mount`` again here? The explicit form would have been much longer::
+That's it! By the way, did you notice that we're using the implicit form of ``--mount`` again here? The explicit form would have been much longer::
 
     tutor dev start \
         --mount=lms,lms-worker,lms-job,cms,cms-worker,cms-job:~/code/edx-platform:/openedx/edx-platform \
         --mount=lms,lms-worker,lms-job,cms,cms-worker,cms-job:~/venvs/venv-openedx:/openedx/venv
 
-The shorter command works because Tutor is willing to implicitly mount folders prefixed with "venv-":
+The shorter command works because Tutor will automatically mount folders named ``venv-openedx`` to all LMS and CMS containers at the right location, ``/openedx/venv``.
 
-* If the folder name is ``venv-openedx``, then it mounts it in LMS and CMS containers.
-* If the folder name is ``venv-<SERVICE>``, then it mounts it in the containers for ``<SERVICE>``.
+Mounting packages
+~~~~~~~~~~~~~~~~~
 
-Mounting package code
-~~~~~~~~~~~~~~~~~~~~~
-
-A slightly more advanced use case is mounting modified versions of code packages so that they can be installed into one or more services, allowing you to preview the results of your package changes. For example, imagine we have made changes to xblock-drag-and-drop-v2, and now we want to preview them by running the modified block in edx-platform.
+A slightly more advanced use case is mounting modified versions of Python packages so that they can be installed into edx-platform, allowing you to preview the results of your package changes in the LMS and Studio. For example, imagine we have made changes to xblock-drag-and-drop-v2, and now we want to preview them in a running platform.
 
 First, we would prepare a local virtual environment as described above. Then, we would mount our modified block and install it into our local virtual environment::
 
     tutor dev run \
         --mount=~/code/xblock-drag-and-drop-v2 \
         --mount=~/venv-openedx \
-        lms bash -c 'pip install -e /openedx/packages/xblock-drag-and-drop-v2'
+        lms pip install -e /openedx/packages/xblock-drag-and-drop-v2
 
 Now, we can (re-)start Open edX::
 
@@ -220,19 +253,47 @@ Again, notice that we mounted xblock-drag-and-drop-v2 using the implicit form. T
 * begins with "xblock-" or
 * begins with "platform-plugin-."
 
-For packages that don't follow these naming conventions or that need to be mounted in different containers, you will need to either rename the package's containing folder, or use the explicit form of ``--mount``::
+For packages that don't follow these naming conventions, you will need to either rename the package's containing folder, or use the explicit form of ``--mount``. For example, to run LMS with a local fork of the edx-django-utils package, we would run::
 
     tutor dev run \
-        --mount=lms,lms-worker,lms-job,cms,cms-worker,cms-job:~/code/edx-django-utls:/openedx/packages/edx-django-utils \
+        --mount=lms,lms-worker,lms-job:~/code/edx-django-utls:/openedx/packages/edx-django-utils \
         --mount=~/venv-openedx \
-        lms bash -c 'pip install -e /openedx/packages/edx-django-utils'
+        lms pip install -e /openedx/packages/edx-django-utils
     tutor dev start \
-        --mount=lms,lms-worker,lms-job,cms,cms-worker,cms-job:~/code/edx-django-utls:/openedx/packages/edx-django-utils \
+        --mount=lms,lms-worker,lms-job:~/code/edx-django-utls:/openedx/packages/edx-django-utils \
         --mount=~/code/edx-platform \
-        --mount=~/venv-openedx \
+        --mount=~/venv-openedx
+
+Setting up a development environment for other services
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Many plugins add extra services to Tutor. For example, the tutor-discovery plugin adds a "discovery" service. The strategies above can generally be modified to work with other Python services.
+
+For example, to prepare and run the discovery service using a local fork of course-discovery and local virtual environment, you might enable tutor-discovery and then run::
+
+    # Prepare local fork for development.
+    # For exact preparation steps for any given plugin, consult the plugin's documentation.
+    # In the case of discovery, we need to install nodejs requirements into node_modules/
+    tutor dev run --mount=~/code/course-discovery discovery npm install
+
+    # Prepare discovery virtual environment.
+    rm -rf ~/venv-discovery
+    tutor dev copyfrom discovery /openedx/venv ~/venv-discovery
+    tutor dev run --mount=~/code/course-discovery --mount=~/venv-discovery discovery \
+        pip install -r requirements/local.txt
+
+    # (re-)start the platform, with discovery code and virtual environment mounted.
+    tutor dev start --mount=~/code/course-discovery --mount=~/venv-discovery
+
+Note that we were able to use the implicit version of ``-m/--mount``, since:
+
+* The tutor-discovery plugin tells Tutor where any folder named ``course-discovery`` should be mounted. Most plugins that add services to Tutor provide this as a convenience.
+* Tutor will mount any folder named ``venv-<SERVICE>`` to ``/openedx/venv`` for any containers of ``<SERVICE>``.
 
 Implicit vs. explicit mounting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This table collects the various folder name patterns that work with the implicit form of ``-m/--mount``:
 
 .. list-table::
    :widths: 30 70
@@ -251,7 +312,8 @@ Implicit vs. explicit mounting
    * - ``-m platform-plugin-ABC``
      - ``-m lms,lms-worker,lms-job,cms,cms-worker,cms-job:platform-plugin-ABC:/openedx/packages/platform-plugin-ABC``
 
-In fact, there are several folder names that work with the implicit form of ``-m/--mount``::
+
+This table collects the various folder name patterns that work with the implicit form of ``-m/--mount``::
 
     +------------------------+------------------------------------------------------------------------------------------------------------+
     | Implicit Form          | Equivalent Explicit Form                                                                                   |
@@ -267,17 +329,10 @@ In fact, there are several folder names that work with the implicit form of ``-m
     | -m platform-plugin-ABC | -m lms,lms-worker,lms-job,cms,cms-worker,cms-job:platform-plugin-ABC:/openedx/packages/platform-plugin-ABC |
     +------------------------+------------------------------------------------------------------------------------------------------------+
 
-So, when should you *not* be using the implicit form? That would be when Tutor does not know where to bind-mount your host folders. For instance, if you wanted to bind-mount your edx-platform virtual environment located in ``~/venvs/edx-platform``, you should not write ``--mount=~/venvs/edx-platform``, because that folder would be mounted in a way that would override the edx-platform repository in the container. Instead, you should write::
-
-    tutor dev start --mount=lms:~/venvs/edx-platform:/openedx/venv lms
-
-.. note:: Remember to setup your edx-platform repository for development! See :ref:`edx_platform_dev_env`.
-
-
 Override docker-compose volumes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The above solutions require that you explicitly pass the ``-m/--mount`` options to every ``run``, ``start`` or ``init`` command, which may be inconvenient. To address these issues, you can create a ``docker-compose.override.yml`` file that will specify custom volumes to be used with all ``dev`` commands::
+All the above strategies require that you explicitly pass the ``-m/--mount`` options to every ``run``, ``start`` or ``init`` command, which may be inconvenient. To address these issues, you can create a ``docker-compose.override.yml`` file that will specify custom volumes to be used with all ``dev`` commands::
 
     vim "$(tutor config printroot)/env/dev/docker-compose.override.yml"
 
@@ -306,44 +361,10 @@ This override file will be loaded when running any ``tutor dev ..`` command. The
 Common tasks
 ------------
 
-.. _edx_platform_dev_env:
-
-Setting up a development environment for edx-platform
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Following the instructions :ref:`above <bind_mounts>` on how to bind-mount directories from the host above, you may mount your own `edx-platform <https://github.com/openedx/edx-platform/>`__ fork in your containers by running::
-
-    tutor dev start -d --mount=/path/to/edx-platform lms
-
-But to achieve that, you will have to make sure that your fork works with Tutor.
-
-First of all, you should make sure that you are working off the latest release tag (unless you are running the Tutor :ref:`nightly <nightly>` branch). See the :ref:`fork edx-platform section <edx_platform_fork>` for more information.
-
-Then, you should run the following commands::
-
-    # Run bash in the lms container
-    tutor dev run --mount=/path/to/edx-platform lms bash
-
-    # Compile local python requirements
-    pip install --requirement requirements/edx/development.txt
-
-    # Install nodejs packages in node_modules/
-    npm clean-install
-
-    # Rebuild static assets
-    openedx-assets build --env=dev
-
-After running all these commands, your edx-platform repository will be ready for local development. To debug a local edx-platform repository, you can then add a `python breakpoint <https://docs.python.org/3/library/functions.html#breakpoint>`__ with ``breakpoint()`` anywhere in your code and run::
-
-    tutor dev start --mount=/path/to/edx-platform lms
-
-The default debugger is ``ipdb.set_trace``. ``PYTHONBREAKPOINT`` can be modified by setting an environment variable in the Docker imamge.
-
-If LMS isn't running, this will start it in your terminal. If an LMS container is already running background, this command will stop it, recreate it, and attach your terminal to it. Later, to detach your terminal without stopping the container, just hit ``Ctrl+z``.
-
-
 XBlock and edx-platform plugin development
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TODO: Delete in favor of "Mounting packages"?
 
 In some cases, you will have to develop features for packages that are pip-installed next to the edx-platform. This is quite easy with Tutor. Just add your packages to the ``$(tutor config printroot)/env/build/openedx/requirements/private.txt`` file. To avoid re-building the openedx Docker image at every change, you should add your package in editable mode. For instance::
 
