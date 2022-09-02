@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+cd /openedx/edx-platform
+
+if [[ ! -d Open_edX.egg-info ]] ; then
+	pip install -e .
+fi
+
+if [[ ! -d node_modules ]] ; then
+	npm install
+	openedx-assets build --env=dev
+elif [[ ! -d common/static/xmodule ]] ; then
+	openedx-assets build --env=dev
+fi
+
