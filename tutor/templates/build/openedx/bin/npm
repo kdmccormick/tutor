@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# Wrapper around 'npm' for openedx image.
+# Ensures that npm always operates in the 'global' /openedx/node_modules directory,
+# not in the 'local' /openedx/edx-platform/node_modules directory.
+#
+# Rationale: We want node_modules to exist outside of the edx-platform repository.
+# That way, when a developer mounts a fork of edx-platform, they don't need to
+# re-run `npm install` themselves, because the pre-built node_modules folder will
+# still be available on the image.
+
+set -ue            # Fail loudly.
+set -x             # Print next command.
+/openedx/nodeenv/bin/npm --global --prefix=/openedx/node_modules "$@"

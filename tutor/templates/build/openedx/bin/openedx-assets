@@ -2,6 +2,7 @@
 from __future__ import print_function
 import argparse
 import os
+import shlex
 import subprocess
 import sys
 import traceback
@@ -98,6 +99,8 @@ def run_build(args):
 
 
 def run_xmodule(_args):
+    print(f"{sys.argv[0]}: Collecting xmodule assets")
+
     # Collecting xmodule assets is incompatible with setting the django path, because
     # of an unfortunate call to settings.configure()
     django_settings_module = os.environ.get("DJANGO_SETTINGS_MODULE")
@@ -114,14 +117,93 @@ def run_xmodule(_args):
 
 
 def run_npm(_args):
-    assets.process_npm_assets()
+    """
+    Post-process npm assets.
+
+    Reimplementation of edx-platform's pavelib/assets.py:process_npm_assets()
+    """
+    print(f"{sys.argv[0]}: Post-processing npm assets")
+
+    # Create JS and CSS vendor directories.
+    _sh(
+        [
+            "mkdir",
+            "-p",
+            "common/static/common/js/vendor",
+            "common/static/common/css/vendor",
+        ]
+    )
+    
+    # Copy studio-frontend CSS and JS into vendor directory.
+    copy_css = """\
+find /openedx/node_modules/@edx/studio-frontend/dist \
+-type f \( -name \*.css -o -name \*.css.map \) | \
+xargs cp --target-directory=common/static/common/css/vendor\
+"""
+    copy_js = """\
+find /openedx/node_modules/@edx/studio-frontend/dist \
+-type f \! -name \*.css \! -name \*.css.map | \
+xargs cp --target-directory=common/static/common/js/vendor\
+"""
+    _sh(["bash", "-c", copy_css])
+    _sh(["bash", "-c", copy_js])
+#    css_find_query = "-type f '(' -name '*.css' -o -name '*.css.map' ')'".split(" ")
+#    js_find_query = "-type f '!' -name '*.css' '!' -name '*.css.map'".split(" ")
+#    _sh(
+#        [
+#           "find",
+#           "/openedx/node_modules/@edx/studio-frontend/dist",
+#           *css_find_query,
+#           "|",
+#           "xargs",
+#           "cp",
+#           "--target-directory=common/static/common/css/vender",
+#        ]
+#    )
+#    _sh(
+#        [
+#           "find",
+#           "/openedx/node_modules/@edx/studio-frontend/dist",
+#           *js_find_query,
+#           "|",
+#           "xargs",
+#           "cp",
+#           "--target-directory=common/static/common/js/vender",
+#        ]
+#    )
+
+    # Copy certain node_modules into vendor directory.
+    _sh(
+        [
+            "cp",
+            "-f",
+            "--target-directory=common/static/common/js/vendor",
+            "/openedx/node_modules/backbone.paginator/lib/backbone.paginator.js",
+            "/openedx/node_modules/backbone/backbone.js",
+            "/openedx/node_modules/bootstrap/dist/js/bootstrap.bundle.js",
+            "/openedx/node_modules/hls.js/dist/hls.js",
+            "/openedx/node_modules/jquery-migrate/dist/jquery-migrate.js",
+            "/openedx/node_modules/jquery.scrollto/jquery.scrollTo.js",
+            "/openedx/node_modules/jquery/dist/jquery.js",
+            "/openedx/node_modules/moment-timezone/builds/moment-timezone-with-data.js",
+            "/openedx/node_modules/moment/min/moment-with-locales.js",
+            "/openedx/node_modules/picturefill/dist/picturefill.js",
+            "/openedx/node_modules/requirejs/require.js",
+            "/openedx/node_modules/underscore.string/dist/underscore.string.js",
+            "/openedx/node_modules/underscore/underscore.js",
+            "/openedx/node_modules/which-country/index.js",
+            "/openedx/node_modules/sinon/pkg/sinon.js",
+            "/openedx/node_modules/squirejs/src/Squire.js",
+        ]
+    )
 
 
 def run_webpack(args):
+    print(f"{sys.argv[0]}: Executing webpack")
     os.environ["STATIC_ROOT_LMS"] = args.static_root
     os.environ["STATIC_ROOT_CMS"] = os.path.join(args.static_root, "studio")
     os.environ["NODE_ENV"] = {"prod": "production", "dev": "development"}[args.env]
-    subprocess.check_call(
+    _sh(
         [
             "webpack",
             "--progress",
@@ -131,12 +213,14 @@ def run_webpack(args):
 
 
 def run_common(args):
+    print(f"{sys.argv[0]}: Compiling sass assets from common theme")
     for system in args.systems:
         print("Compiling {} sass assets from common theme...".format(system))
         assets._compile_sass(system, None, False, False, [])
 
 
 def run_themes(args):
+    print(f"{sys.argv[0]}: Compiling sass assets for custom themes")
     for theme_dir in args.theme_dirs:
         local_themes = (
             list_subdirectories(theme_dir) if "all" in args.themes else args.themes
@@ -154,6 +238,7 @@ def run_themes(args):
 
 
 def run_collect(args):
+    print(f"{sys.argv[0]}: Collecting assets")
     assets.collect_assets(args.systems, args.settings)
 
 
@@ -213,6 +298,10 @@ class ThemeWatcher(assets.SassWatcher):
         except Exception:  # pylint: disable=broad-except
             traceback.print_exc()
 
+
+def _sh(args):
+    print(f"+{shlex.join(args)}")
+    return subprocess.check_call(args)
 
 if __name__ == "__main__":
     main()
