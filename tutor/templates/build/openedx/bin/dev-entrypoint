@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# To be run from /openedx/edx-platform
+
+# Echo out all commands.
+set -x 
+
+# Fail if variables undefined. Use rightmost return value in chained command.
+set -uo pipefail
+
+# Do we have a mounted repo with changed Python or NPM dependencies?
+#   0 -> no change
+#   1 -> yes change
+diff /openedx/dependency-cache/development.txt requirements/edx/development.txt
+python_deps_diff=$?
+diff /openedx/dependency-cache/package.json package.json && diff /openedx/dependency-cache/package-lock.json package-lock.json
+npm_deps_diff=$?
+
+# Fail if subcommands return nonzero.
+set -e  
+
+# Reinstall Python deps if changed.
+if [ "$python_deps_diff" -ne 0 ] ; then
+	pip install -r requirements/edx/development.txt
+fi
+
+# Install edx-platform local package as well as any mounted packages.
+pip install -e .
+if [ ! -z $(ls /openedx/mounted-packages) ] ; then 
+	for PACKAGE in /openedx/mounted-packages/* ; do
+		pip install -e "$PACKAGE"
+	done
+fi
+
+# Link node_modules to image's built-in node_modules folder.
+[ -d node_modules ] && mv node_modules node_modules.bak
+ln -s /openedx/dependency-cache/node_modules
+
+# Reinstall NPM deps if changed.
+if [ "$npm_deps_diff" -ne 0 ] ; then
+	npm install
+fi
+
+# Rebuild static assets if either Python or NPM have changed.
+if [ "$python_deps_diff" -ne 0 ] || [ "$npm_deps_diff" -ne 0 ] ; then
+	openedx-assets build --env=dev
+fi
+
+# Call script arguments as a command.
+"$@"

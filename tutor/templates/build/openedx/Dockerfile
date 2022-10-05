@@ -186,15 +186,15 @@ ENV NO_PREREQ_INSTALL 1
 # We need to rely on a separate openedx-assets command to accelerate asset processing.
 # For instance, we don't want to run all steps of asset collection every time the theme
 # is modified.
-RUN openedx-assets xmodule \
-    && openedx-assets npm \
-    && openedx-assets webpack --env=prod \
-    && openedx-assets common
+##RUN openedx-assets xmodule \
+##    && openedx-assets npm \
+##    && openedx-assets webpack --env=prod \
+##    && openedx-assets common
 COPY --chown=app:app ./themes/ /openedx/themes/
-RUN openedx-assets themes \
-    && openedx-assets collect --settings=tutor.assets \
-    # De-duplicate static assets with symlinks
-    && rdfind -makesymlinks true -followsymlinks true /openedx/staticfiles/
+##RUN openedx-assets themes \
+##    && openedx-assets collect --settings=tutor.assets \
+##    # De-duplicate static assets with symlinks
+##    && rdfind -makesymlinks true -followsymlinks true /openedx/staticfiles/
 
 # Create a data directory, which might be used (or not)
 RUN mkdir /openedx/data
@@ -212,29 +212,41 @@ FROM production as development
 
 # Install useful system requirements (as root)
 USER root
-RUN apt update && \
-    apt install -y vim iputils-ping dnsutils telnet \
-    && rm -rf /var/lib/apt/lists/*
+##RUN apt update && \
+##    apt install -y vim iputils-ping dnsutils telnet \
+##    && rm -rf /var/lib/apt/lists/*
 USER app
 
-# Install dev python requirements
-RUN pip install -r requirements/edx/development.txt
-RUN pip install ipdb==0.13.4 ipython==7.27.0
-
 # Add ipdb as default PYTHONBREAKPOINT
-ENV PYTHONBREAKPOINT=ipdb.set_trace
+##ENV PYTHONBREAKPOINT=ipdb.set_trace
+##RUN pip install ipdb==0.13.4 ipython==7.27.0
+
+# Copy in [TODO: comment]
+#COPY dev/edx-platform-overrides . (TODO: req overrides)
+#COPY dev/edx-platform/package.json package.json (TODO: frontend)
+#COPY dev/edx-platform/package-lock.json package-lock.json (TODO: frontend)
+
+# Reinstall requirements (in dev mode for Python requirements)
+##RUN pip install -r requirements/edx/development.txt
+#RUN npm install (TODO: frontend)
 
 # Recompile static assets: in development mode all static assets are stored in edx-platform,
 # and the location of these files is stored in webpack-stats.json. If we don't recompile
 # static assets, then production assets will be served instead.
-RUN rm -r /openedx/staticfiles && \
-    mkdir /openedx/staticfiles && \
-    openedx-assets webpack --env=dev
+##RUN rm -r /openedx/staticfiles && \
+##   mkdir /openedx/staticfiles && \
+##  openedx-assets webpack --env=dev
 
 {{ patch("openedx-dev-dockerfile-post-python-requirements") }}
 
 # Default django settings
 ENV DJANGO_SETTINGS_MODULE lms.envs.tutor.development
+
+RUN mkdir /openedx/mounted-packages /openedx/dependency-cache
+RUN mv node_modules /openedx/dependency-cache/node_modules
+RUN ln -s /openedx/dependency-cache/node_modules
+RUN cp -r package.json package-lock.json requirements/edx/development.txt /openedx/dependency-cache
+ENTRYPOINT dev-entrypoint
 
 CMD ./manage.py $SERVICE_VARIANT runserver 0.0.0.0:8000
 

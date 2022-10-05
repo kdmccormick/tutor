@@ -246,6 +246,13 @@ def start(
 
     # Start services
     mount_tmp_volumes(mounts, context)
+    #edx_platform_overrides = f"{context.root}/env/build/dev/edx-platform-overrides"
+    #utils.execute("rm", "-rf", edx_platform_overrides)
+    #utils.execute("mkdir", "-p", edx_platform_overrides)
+    #for service, host_path, dest_path in [mount for ms in mounts for mount in ms]:
+    #    if dest_path == "/openedx/edx-platform":
+    #        utils.execute("cp", f"{host_path}/requirements", edx_platform_overrides)
+    #        break
     config = tutor_config.load(context.root)
     context.job_runner(config).docker_compose(*command, *services)
 
@@ -546,6 +553,26 @@ def _mount_edx_platform(
     """
     if name == "edx-platform":
         path = "/openedx/edx-platform"
+        volumes += [
+            ("lms", path),
+            ("cms", path),
+            ("lms-worker", path),
+            ("cms-worker", path),
+            ("lms-job", path),
+            ("cms-job", path),
+        ]
+    return volumes
+
+
+@hooks.Filters.COMPOSE_MOUNTS.add()
+def _mount_edx_platform(
+    volumes: t.List[t.Tuple[str, str]], name: str
+) -> t.List[t.Tuple[str, str]]:
+    """
+    TODO
+    """
+    if name.startswith("xblock-") or name.startswith("platform-plugin-"):
+        path = f"/openedx/mounted-packages/{name}"
         volumes += [
             ("lms", path),
             ("cms", path),
