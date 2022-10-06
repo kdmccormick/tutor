@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 # To be run from /openedx/edx-platform
 
-# Echo out all commands.
-set -x 
-
 # Fail if variables undefined. Use rightmost return value in chained command.
 set -uo pipefail
 
@@ -16,33 +13,61 @@ diff /openedx/dependency-cache/package.json package.json && diff /openedx/depend
 npm_deps_diff=$?
 
 # Fail if subcommands return nonzero.
-set -e  
+set -e
 
 # Reinstall Python deps if changed.
 if [ "$python_deps_diff" -ne 0 ] ; then
+	echo "Python dependencies changed; reinstalling"
+	set -x
 	pip install -r requirements/edx/development.txt
+	set +x
+else
+	echo "Python dependencies unchanged; skip pip install"
 fi
 
-# Install edx-platform local package as well as any mounted packages.
+echo "Generating edx-platform's .egg-info file"
+set -x
 pip install -e .
-if [ ! -z $(ls /openedx/mounted-packages) ] ; then 
+set +x
+
+if [ -n "$(ls /openedx/mounted-packages)" ] ; then
+	echo "Installing packages at /openedx/mounted-packages"
+	set -x
 	for PACKAGE in /openedx/mounted-packages/* ; do
 		pip install -e "$PACKAGE"
 	done
+	set +x
+else
+	echo "No mounted packages at /openedx/mounted-packages to install"
 fi
 
-# Link node_modules to image's built-in node_modules folder.
-[ -d node_modules ] && mv node_modules node_modules.bak
-ln -s /openedx/dependency-cache/node_modules
+echo "Changing node_modules to be a link to saved /openedx/node_modules"
+if [ -d node_modules ] ; then
+	echo "Old node_modules is saved at node_modules.bak"
+	set -x
+	mv node_modules node_modules.bak
+	set +x
+fi
+set -x
+ln -s /openedx/node_modules node_modules
+set +x
 
-# Reinstall NPM deps if changed.
 if [ "$npm_deps_diff" -ne 0 ] ; then
+	echo "NPM dependencies changed; reinstalling"
+	set -x
 	npm install
+	set +x
+else
+	echo "NPM dependencies unchanged; skipping npm install"
 fi
 
-# Rebuild static assets if either Python or NPM have changed.
 if [ "$python_deps_diff" -ne 0 ] || [ "$npm_deps_diff" -ne 0 ] ; then
+	echo "Python and/or NPM dependencies changed; re-building static assets"
+	set -x
 	openedx-assets build --env=dev
+	set +x
+else
+	echo "Both Python and NPM dependencies unchanged; skipping openedx-assets build"
 fi
 
 # Call script arguments as a command.
