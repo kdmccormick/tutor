@@ -7,13 +7,16 @@ import typing as t
 from typing_extensions import ParamSpec
 
 from .contexts import Contextualized
+from .priorities import Priorities
 
 P = ParamSpec("P")
 # Similarly to CallableFilter, it should be possible to create a CallableAction alias in
 # the future.
 # CallableAction = t.Callable[P, None]
 
-DEFAULT_PRIORITY = 10
+
+# Deprecated alias for the default hook callback priority.
+DEFAULT_PRIORITY = Priorities.DEFAULT
 
 
 class ActionCallback(Contextualized, t.Generic[P]):
@@ -24,7 +27,7 @@ class ActionCallback(Contextualized, t.Generic[P]):
     ):
         super().__init__()
         self.func = func
-        self.priority = priority or DEFAULT_PRIORITY
+        self.priority = priority or Priorities.DEFAULT
 
     def do(
         self,
@@ -39,7 +42,8 @@ class Action(t.Generic[P]):
     Action hooks have callbacks that are triggered independently from one another.
 
     Several actions are defined across the codebase. Each action is given a unique name.
-    To each action are associated zero or more callbacks, sorted by priority.
+    To each action are associated zero or more callbacks, sorted by priority
+    (see: :py:class:`tutor.hooks.Priorities`).
 
     This is the typical action lifecycle:
 
@@ -191,10 +195,10 @@ def add(
     :param name: name of the action. For forward compatibility, it is
         recommended not to hardcode any string here, but to pick a value from
         :py:class:`tutor.hooks.Actions` instead.
-    :param priority: optional order in which the action callbacks are performed. Higher
-        values mean that they will be performed later. The default value is
-        ``DEFAULT_PRIORITY`` (10). Actions that should be performed last should
-        have a priority of 100.
+    :param priority: optional order in which the action callbacks are performed.
+        A larger numerical value indicates a lower (later) priority.
+        Default is ``Priorities.DEFAULT`` (10).
+        See :py:class:`tutor.hooks.Priorities` for details.
 
     Usage::
 

@@ -6,6 +6,7 @@ import typing as t
 
 from typing_extensions import Concatenate, ParamSpec
 
+from .priorities import Priorities
 from . import contexts
 
 T = t.TypeVar("T")
@@ -32,7 +33,8 @@ class Filter(t.Generic[T, P]):
     Filter hooks have callbacks that are triggered as a chain.
 
     Several filters are defined across the codebase. Each filters is given a unique
-    name. To each filter are associated zero or more callbacks, sorted by priority.
+    name. To each filter are associated zero or more callbacks, sorted by priority
+    (see: :py:class:`tutor.hooks.Priorities`).
 
     This is the typical filter lifecycle:
 

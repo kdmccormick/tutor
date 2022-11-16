@@ -9,3 +9,4 @@ Hooks API
    filters
    contexts
    consts
+   priorities

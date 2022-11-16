@@ -5,6 +5,7 @@ import typing as t
 
 # These imports are the hooks API
 from . import actions, contexts, filters
+from .priorities import Priorities
 from .consts import *
 
 
