@@ -1,0 +1,10 @@
+#!/bin/sh
+
+if [ -z $(pip freeze | grep pytest) ] ; then
+	echo 'error: pytest is not installed into the Python virtualenv' &>2
+	echo 'Perhaps you are trying to run tests with `tutor local` or `tutor k8s` instead of `tutor dev`?'
+	exit 1
+fi
+
+exec /openedx/venv/bin/pytest
+
