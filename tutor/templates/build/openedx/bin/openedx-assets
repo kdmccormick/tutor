@@ -1,18 +1,42 @@
 #! /usr/bin/env python
-from __future__ import print_function
+from __future__ import annotations
+
 import argparse
+import glob
 import os
+import shlex
 import subprocess
 import sys
 import traceback
+from datetime import datetime
+from pathlib import Path
 
-from path import Path
-
-from pavelib import assets
+import sass  # pylint: disable=import-error
+from pavelib.assets import (  # pylint: disable=import-error
+    Observer,
+    SassWatcher,
+    debounce,
+    _compile_sass,
+)
 
 
 DEFAULT_STATIC_ROOT = "/openedx/staticfiles"
 DEFAULT_THEMES_DIR = "/openedx/themes"
+
+NODE_MODULES_PATH = Path("/openedx/node_modules")
+
+# Common lookup paths that are added to the lookup paths for all sass compilations
+COMMON_LOOKUP_PATHS = [
+    Path("common/static"),
+    Path("common/static/sass"),
+    NODE_MODULES_PATH / "@edx",
+    NODE_MODULES_PATH,
+]
+
+# system specific lookup path additions, add sass dirs if one system depends on the sass files for other systems
+SASS_LOOKUP_DEPENDENCIES = {
+    'cms': [Path('lms') / 'static' / 'sass' / 'partials', ],
+}
 
 
 def main():
@@ -21,16 +45,16 @@ def main():
     )
     subparsers = parser.add_subparsers()
 
-    npm = subparsers.add_parser("npm", help="Copy static assets from node_modules")
-    npm.set_defaults(func=run_npm)
-
-    build = subparsers.add_parser("build", help="Build all assets")
+    build = subparsers.add_parser("build", help="Build all assets (npm+xmodule+webpack+common+themes)")
     build.add_argument("-e", "--env", choices=["prod", "dev"], default="prod")
     build.add_argument("--theme-dirs", nargs="+", default=[DEFAULT_THEMES_DIR])
     build.add_argument("--themes", nargs="+", default=["all"])
     build.add_argument("-r", "--static-root", default=DEFAULT_STATIC_ROOT)
     build.add_argument("--systems", nargs="+", default=["lms", "cms"])
     build.set_defaults(func=run_build)
+
+    npm = subparsers.add_parser("npm", help="Copy static assets from node_modules")
+    npm.set_defaults(func=run_npm)
 
     xmodule = subparsers.add_parser("xmodule", help="Process assets from xmodule")
     xmodule.set_defaults(func=run_xmodule)
@@ -98,6 +122,8 @@ def run_build(args):
 
 
 def run_xmodule(_args):
+    print(f"{sys.argv[0]}: Collecting xmodule assets")
+
     # Collecting xmodule assets is incompatible with setting the django path, because
     # of an unfortunate call to settings.configure()
     django_settings_module = os.environ.get("DJANGO_SETTINGS_MODULE")
@@ -105,7 +131,7 @@ def run_xmodule(_args):
         os.environ.pop("DJANGO_SETTINGS_MODULE")
 
     sys.argv[1:] = ["common/static/xmodule"]
-    import xmodule.static_content
+    import xmodule.static_content  # pylint: disable=import-error
 
     xmodule.static_content.main()
 
@@ -114,29 +140,32 @@ def run_xmodule(_args):
 
 
 def run_npm(_args):
-    assets.process_npm_assets()
-
+    """
+    Post-process npm assets.
+    """
+    sh("/bin/sh", "scripts/assets/copy-node-modules.sh", "--node-modules", "/openedx/node_modules")
 
 def run_webpack(args):
+    print(f"{sys.argv[0]}: Executing webpack")
     os.environ["STATIC_ROOT_LMS"] = args.static_root
     os.environ["STATIC_ROOT_CMS"] = os.path.join(args.static_root, "studio")
     os.environ["NODE_ENV"] = {"prod": "production", "dev": "development"}[args.env]
-    subprocess.check_call(
-        [
-            "webpack",
-            "--progress",
-            "--config=webpack.{env}.config.js".format(env=args.env),
-        ]
+    sh(
+        "webpack",
+        "--progress",
+        "--config=webpack.{env}.config.js".format(env=args.env),
     )
 
 
 def run_common(args):
+    print(f"{sys.argv[0]}: Compiling sass assets from common theme")
     for system in args.systems:
         print("Compiling {} sass assets from common theme...".format(system))
-        assets._compile_sass(system, None, False, False, [])
+        _compile_sass(system, None, False, False, [])
 
 
 def run_themes(args):
+    print(f"{sys.argv[0]}: Compiling sass assets for custom themes")
     for theme_dir in args.theme_dirs:
         local_themes = (
             list_subdirectories(theme_dir) if "all" in args.themes else args.themes
@@ -150,11 +179,12 @@ def run_themes(args):
                             system, theme_path
                         )
                     )
-                    assets._compile_sass(system, Path(theme_path), False, False, [])
+                    _compile_sass(system, Path(theme_path), False, False, [])
 
 
 def run_collect(args):
-    assets.collect_assets(args.systems, args.settings)
+    print(f"{sys.argv[0]}: Collecting assets")
+    collect_assets(args.systems, args.settings)
 
 
 def run_watch_themes(args):
@@ -168,7 +198,7 @@ def run_watch_themes(args):
     Note that this function will only work for watching assets in development
     mode. In production, watching changes does not make much sense anyway.
     """
-    observer = assets.Observer()
+    observer = Observer()
     for theme_dir in args.theme_dirs:
         print("Watching changes in {}...".format(theme_dir))
         ThemeWatcher(theme_dir).register(observer)
@@ -188,7 +218,7 @@ def list_subdirectories(path):
     ]
 
 
-class ThemeWatcher(assets.SassWatcher):
+class ThemeWatcher(SassWatcher):
     def __init__(self, theme_dir):
         super(ThemeWatcher, self).__init__()
         self.theme_dir = theme_dir
@@ -197,7 +227,7 @@ class ThemeWatcher(assets.SassWatcher):
     def register(self, observer):
         return super(ThemeWatcher, self).register(observer, [self.theme_dir])
 
-    @assets.debounce()
+    @debounce()
     def on_any_event(self, event):
         components = os.path.relpath(event.src_path, self.theme_dir).split("/")
         try:
@@ -208,10 +238,227 @@ class ThemeWatcher(assets.SassWatcher):
         try:
             print("Detected change:", event.src_path)
             print("\tRecompiling {} theme for {}".format(theme, system))
-            assets._compile_sass(system, Path(self.theme_dir) / theme, False, False, [])
+            _compile_sass(system, Path(self.theme_dir) / theme, False, False, [])
             print("\tDone recompiling {} theme for {}".format(theme, system))
         except Exception:  # pylint: disable=broad-except
             traceback.print_exc()
+
+
+def __compile_sass(system: str, theme: Path|None, debug: bool, force: bool, timing_info: list):
+    """
+    Compile sass files for the given system and theme.
+
+    Reimplementation of edx-platform's pavelib.assets:_compile_sass
+
+    :param system: system to compile sass for e.g. 'lms', 'cms', 'common'
+    :param theme: absolute path of the theme to compile sass for.
+    :param debug: showing whether to display source comments in resulted css
+    :param force: showing whether to remove existing css files before generating new files
+    :param timing_info: (unused in this implementation)
+    """
+    sass_dirs: list[dict]
+    if system == "common":
+        sass_dirs = [{
+            "sass_source_dir": Path("common/static/sass"),
+            "css_destination_dir": Path("common/static/css"),
+            "lookup_paths": COMMON_LOOKUP_PATHS,
+        }]
+    elif theme:
+        sass_dirs = get_theme_sass_dirs(system, theme)
+    else:
+        sass_dirs = get_system_sass_dirs(system)
+
+    # determine css out put style and source comments enabling
+    if debug:
+        source_comments = True
+        output_style = 'nested'
+    else:
+        source_comments = False
+        output_style = 'compressed'
+
+    for dirs in sass_dirs:
+        start = datetime.now()
+        css_dir = str(dirs['css_destination_dir'])
+        sass_source_dir = str(dirs['sass_source_dir'])
+        lookup_paths: list[Path] = dirs['lookup_paths']
+
+        if not Path(sass_source_dir).is_dir():
+            print("\033[91m Sass dir '{dir}' does not exists, skipping sass compilation for '{theme}' \033[00m".format(
+                dir=sass_source_dir, theme=theme or system,
+            ))
+            # theme doesn't override sass directory, so skip it
+            continue
+
+        if force:
+            sh(f"rm", "-rf", f"{css_dir}/*.css")
+
+        sass.compile(
+            dirname=(sass_source_dir, css_dir),
+            include_paths=[str(path) for path in COMMON_LOOKUP_PATHS + lookup_paths],
+            source_comments=source_comments,
+            output_style=output_style,
+        )
+
+        # For Sass files without explicit RTL versions, generate
+        # an RTL version of the CSS using the rtlcss library.
+        for sass_file in glob.glob(str(sass_source_dir) + '/**/*.scss'):
+            if should_generate_rtl_css_file(sass_file):
+                source_css_file = sass_file.replace(sass_source_dir, css_dir).replace('.scss', '.css')
+                target_css_file = source_css_file.replace('.css', '-rtl.css')
+                sh("rtlcss", source_css_file, target_css_file)
+
+
+def get_theme_sass_dirs(system: str, theme_dir: Path) -> list[dict]:
+    """
+    Return list of sass dirs that need to be compiled for the given theme.
+    """
+    dirs = []
+
+    system_sass_dir = Path(system) / "static" / "sass"
+    sass_dir = theme_dir / system / "static" / "sass"
+    css_dir = theme_dir / system / "static" / "css"
+    certs_sass_dir = theme_dir / system / "static" / "certificates" / "sass"
+    certs_css_dir = theme_dir / system / "static" / "certificates" / "css"
+
+    dependencies = SASS_LOOKUP_DEPENDENCIES.get(system, [])
+    if sass_dir.is_dir():
+        css_dir.mkdir(parents=True, exist_ok=True)
+
+        # first compile lms sass files and place css in theme dir
+        dirs.append({
+            "sass_source_dir": system_sass_dir,
+            "css_destination_dir": css_dir,
+            "lookup_paths": dependencies + [
+                sass_dir / "partials",
+                system_sass_dir / "partials",
+                system_sass_dir,
+            ],
+        })
+
+        # now compile theme sass files and override css files generated from lms
+        dirs.append({
+            "sass_source_dir": sass_dir,
+            "css_destination_dir": css_dir,
+            "lookup_paths": dependencies + [
+                sass_dir / "partials",
+                system_sass_dir / "partials",
+                system_sass_dir,
+            ],
+        })
+
+        # now compile theme sass files for certificate
+        if system == 'lms':
+            dirs.append({
+                "sass_source_dir": certs_sass_dir,
+                "css_destination_dir": certs_css_dir,
+                "lookup_paths": [
+                    sass_dir / "partials",
+                    sass_dir
+                ],
+            })
+
+    return dirs
+
+
+def get_system_sass_dirs(system) -> list[dict]:
+    """
+    Return list of sass dirs that need to be compiled for the given system.
+    """
+    dirs = []
+    sass_dir = Path(system) / "static" / "sass"
+    css_dir = Path(system) / "static" / "css"
+    dependencies = SASS_LOOKUP_DEPENDENCIES.get(system, [])
+    dirs.append({
+        "sass_source_dir": sass_dir,
+        "css_destination_dir": css_dir,
+        "lookup_paths": dependencies + [
+            sass_dir / "partials",
+            sass_dir,
+        ],
+    })
+    if system == 'lms':
+        dirs.append({
+            "sass_source_dir": Path(system) / "static" / "certificates" / "sass",
+            "css_destination_dir": Path(system) / "static" / "certificates" / "css",
+            "lookup_paths": [
+                sass_dir / "partials",
+                sass_dir
+            ],
+        })
+    return dirs
+
+
+def should_generate_rtl_css_file(sass_file: str) -> bool:
+    """
+    Returns true if a Sass file should have an RTL version generated.
+    """
+    # Don't generate RTL CSS for partials
+    if Path(sass_file).name.startswith('_'):
+        return False
+
+    # Don't generate RTL CSS if the file is itself an RTL version
+    if sass_file.endswith('-rtl.scss'):
+        return False
+
+    # Don't generate RTL CSS if there is an explicit Sass version for RTL
+    rtl_sass_file = Path(sass_file.replace('.scss', '-rtl.scss'))
+    if rtl_sass_file.exists():
+        return False
+
+    return True
+
+
+def collect_assets(systems: list[str], settings: str):
+    """
+    Collect static assets, including Django pipeline processing.
+    
+    Reimplementation of edx-platform's pavelib.assets.collect_assets
+    """
+    ignore_patterns = [
+        # Karma test related files...
+        "fixtures",
+        "karma_*.js",
+        "spec",
+        "spec_helpers",
+        "spec-helpers",
+        "xmodule_js",  # symlink for tests
+
+        # Geo-IP data, only accessed in Python
+        "geoip",
+
+        # We compile these out, don't need the source files in staticfiles
+        "sass",
+    ]
+
+    ignore_args: list[str] = [
+        arg
+        for pattern in ignore_patterns
+        for arg in [f"--ignore", pattern]
+    ]
+    for sys in systems:
+        if sys == "studio":
+            sys = "cms"
+        sh(
+            "./manage.py",
+            sys,
+            "collectstatic",
+            *ignore_args,
+            "--noinput",
+            "--settings",
+            settings,
+        )
+        print(f"\t\tFinished collecting {sys} assets.")
+
+
+def sh(*command):
+    """
+    Run command in a shell.
+
+    (if we ran it directly, globbing (*) wouldn't work)
+    """
+    shell_command = shlex.join(command)
+    print(f"+{shell_command}")
+    return subprocess.check_call(shell_command, shell=True)
 
 
 if __name__ == "__main__":

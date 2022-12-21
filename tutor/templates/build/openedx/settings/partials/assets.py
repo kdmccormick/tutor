@@ -18,4 +18,17 @@ DATABASES = {
     "default": {},
 }
 
+# Upstream expects node_modules to be within edx-platform, but we put
+# node_modules under /openedx/node_modules, so we must adjust any settings
+# that hold a node_modules path.
+NODE_MODULES_ROOT = "/openedx/node_modules/@edx"
+STATICFILES_DIRS = [
+    *[
+        staticfiles_dir for staticfiles_dir in STATICFILES_DIRS
+        if "node_modules/@edx" not in staticfiles_dir
+    ],
+    NODE_MODULES_ROOT,
+]
+PIPELINE["UGLIFYJS_BINARY"] = "/openedx/node_modules/.bin/uglifyjs"
+
 {{ patch("openedx-common-assets-settings") }}

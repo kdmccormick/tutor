@@ -107,11 +107,11 @@ ENV PATH /openedx/nodeenv/bin:/openedx/venv/bin:${PATH}
 RUN pip install nodeenv==1.7.0
 RUN nodeenv /openedx/nodeenv --node=16.14.0 --prebuilt
 
-# Install nodejs requirements
+# Install nodejs requirements to /openedx/node_modules
 ARG NPM_REGISTRY={{ NPM_REGISTRY }}
-COPY --from=code /openedx/edx-platform/package.json /openedx/edx-platform/package.json
-COPY --from=code /openedx/edx-platform/package-lock.json /openedx/edx-platform/package-lock.json
-WORKDIR /openedx/edx-platform
+COPY --from=code /openedx/edx-platform/package.json /openedx/package.json
+COPY --from=code /openedx/edx-platform/package-lock.json /openedx/package-lock.json
+WORKDIR /openedx
 RUN npm install --verbose --registry=$NPM_REGISTRY
 
 ###### Production image with system and python requirements
@@ -136,9 +136,9 @@ COPY --chown=app:app --from=python /opt/pyenv /opt/pyenv
 COPY --chown=app:app --from=python-requirements /openedx/venv /openedx/venv
 COPY --chown=app:app --from=python-requirements /openedx/requirements /openedx/requirements
 COPY --chown=app:app --from=nodejs-requirements /openedx/nodeenv /openedx/nodeenv
-COPY --chown=app:app --from=nodejs-requirements /openedx/edx-platform/node_modules /openedx/edx-platform/node_modules
+COPY --chown=app:app --from=nodejs-requirements /openedx/node_modules /openedx/node_modules
 
-ENV PATH /openedx/venv/bin:./node_modules/.bin:/openedx/nodeenv/bin:${PATH}
+ENV PATH /openedx/venv/bin:/openedx/node_modules/.bin:/openedx/nodeenv/bin:${PATH}
 ENV VIRTUAL_ENV /openedx/venv/
 WORKDIR /openedx/edx-platform
 
