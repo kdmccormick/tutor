@@ -1,0 +1,22 @@
+#!/bin/sh
+# Entrypoint script for the openedx image.
+# When a command is run from the openedx image, e.g.:
+#    tutor local run lms ./manage.py lms migrate
+# It actually goes through this script:
+#    set-up-and-run ./manage.py lms migrate
+
+# When a local copy of edx-platform is bind-mounted, its
+# egg-info directory may be missing or out of date. (The
+# egg-info contains compiled Python entrypoint metadata, which
+# is used by XBlock, Django App Plugins, and console scripts.)
+# So, we regenerate egg-info by pip-installing this directory.
+# To avoid running pip-install from *every* new lms and cms
+# container, we only run it if the entrypoint metadata is missing
+# or outdated.
+ENTRY_POINTS_INFO=Open_edX.egg-info/entry_points.txt
+if [ ! -f "$ENTRY_POINTS_INFO" ] || [ "$ENTRY_POINTS_INFO" -ot setup.py ]; then
+	pip install -e .
+fi
+
+# Run all arguments as a command.
+"$@"

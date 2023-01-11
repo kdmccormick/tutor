@@ -211,9 +211,6 @@ Then, you should run the following commands::
     # Run bash in the lms container
     tutor dev run --mount=/path/to/edx-platform lms bash
 
-    # Compile local python requirements
-    pip install --requirement requirements/edx/development.txt
-
     # Install nodejs packages in node_modules/
     npm clean-install
 
