@@ -200,7 +200,7 @@ Setting up a development environment for edx-platform
 
 Following the instructions :ref:`above <bind_mounts>` on how to bind-mount directories from the host above, you may mount your own `edx-platform <https://github.com/openedx/edx-platform/>`__ fork in your containers by running::
 
-    tutor dev start -d --mount=/path/to/edx-platform lms
+    tutor dev launch -d --mount=/path/to/edx-platform
 
 But to achieve that, you will have to make sure that your fork works with Tutor.
 
@@ -211,16 +211,17 @@ Then, you should run the following commands::
     # Run bash in the lms container
     tutor dev run --mount=/path/to/edx-platform lms bash
 
-    # Compile local python requirements
-    pip install --requirement requirements/edx/development.txt
-
     # Install nodejs packages in node_modules/
     npm clean-install
 
     # Rebuild static assets
     openedx-assets build --env=dev
 
-After running all these commands, your edx-platform repository will be ready for local development. To debug a local edx-platform repository, you can then add a `python breakpoint <https://docs.python.org/3/library/functions.html#breakpoint>`__ with ``breakpoint()`` anywhere in your code and run::
+After running all these commands, your edx-platform repository will be ready for local development. Going forward, for the same copy of edx-platform, you can use ``start`` instead of ``launch`` to start the platform more quickly::
+
+   tutor dev start -d --mount=/path/to/edx/platform
+
+To debug a local edx-platform repository, you can then add a `python breakpoint <https://docs.python.org/3/library/functions.html#breakpoint>`__ with ``breakpoint()`` anywhere in your code and run::
 
     tutor dev start --mount=/path/to/edx-platform lms
 

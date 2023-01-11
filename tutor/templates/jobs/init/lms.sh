@@ -1,5 +1,15 @@
+# When a local copy of edx-platform is bind-mounted, its
+# egg-info directory may be missing or out of date. (The
+# egg-info contains compiled Python entrypoint metadata, which
+# is used by XBlock, Django App Plugins, and console scripts.)
+# So, we regenerate egg-info by pip-installing this directory.
+ENTRY_POINTS_INFO=Open_edX.egg-info/entry_points.txt
+if [ ! -f "$ENTRY_POINTS_INFO" ] || [ "$ENTRY_POINTS_INFO" -ot setup.py ]; then
+  pip install -e .
+fi
 dockerize -wait tcp://{{ MYSQL_HOST }}:{{ MYSQL_PORT }} -timeout 20s
 
+# Wait for MongoDB.
 {%- if MONGODB_HOST.startswith("mongodb+srv://") %}
 echo "MongoDB is using SRV records, so we cannot wait for it to be ready"
 {%- else %}
@@ -8,6 +18,7 @@ dockerize -wait tcp://{{ MONGODB_HOST }}:{{ MONGODB_PORT }} -timeout 20s
 
 echo "Loading settings $DJANGO_SETTINGS_MODULE"
 
+# Run migrations.
 ./manage.py lms migrate
 
 # Create oauth2 apps for CMS SSO
