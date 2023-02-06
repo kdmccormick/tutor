@@ -89,11 +89,14 @@ RUN pip install uwsgi==2.0.21
 
 {{ patch("openedx-dockerfile-post-python-requirements") }}
 
+# Copy shell scripts. Python scripts will be copied in later.
+ENV PATH /openedx/bin:${PATH}
+COPY ./bin/pip-install-all /openedx/bin/pip-install-all
+RUN chmod a+x /openedx/bin/pip-install-all
+
 # Install private requirements: this is useful for installing custom xblocks.
 COPY ./requirements/ /openedx/requirements
-RUN cd /openedx/requirements/ \
-  && touch ./private.txt \
-  && pip install -r ./private.txt
+RUN pip-install-all /openedx/requirements
 
 {% for extra_requirements in OPENEDX_EXTRA_PIP_REQUIREMENTS %}RUN pip install '{{ extra_requirements }}'
 {% endfor %}
@@ -168,10 +171,9 @@ RUN cd /openedx/locale/user && \
 RUN ./manage.py lms --settings=tutor.i18n compilejsi18n
 RUN ./manage.py cms --settings=tutor.i18n compilejsi18n
 
-# Copy scripts
+# Copy Python scripts
 COPY --chown=app:app ./bin /openedx/bin
 RUN chmod a+x /openedx/bin/*
-ENV PATH /openedx/bin:${PATH}
 
 {{ patch("openedx-dockerfile-pre-assets") }}
 
@@ -223,6 +225,10 @@ RUN pip install -r requirements/edx/development.txt
 # https://pypi.org/project/ipdb/
 # https://pypi.org/project/ipython
 RUN pip install ipdb==0.13.9 ipython==8.7.0
+
+# Install development-only private requirements
+COPY --chown=app:app ./requirements-dev /openedx/requirements-dev
+RUN pip-install-all /openedx/requirements-dev
 
 # Add ipdb as default PYTHONBREAKPOINT
 ENV PYTHONBREAKPOINT=ipdb.set_trace

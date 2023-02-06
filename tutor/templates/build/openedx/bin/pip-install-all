@@ -1,0 +1,36 @@
+#!/bin/sh
+# TODO: Document this
+
+set -eu
+
+script="$(basename "$0")"
+
+if [ $# != 1 ] ; then
+	echo "$script: error: expected exactly one argument: a directory."
+	exit 1
+fi
+
+dir="$1"
+
+if [ ! -d "$dir" ] ; then
+	echo "$script: error: not a directory: $dir"
+	exit 1
+fi
+
+if [ -z "$(ls -A "$dir")" ] ; then
+	echo "$script: $dir is empty; nothing to do"
+	exit 0
+fi
+
+for dir_item in "$dir"/* ; do
+	if [ ! -d "$dir_item" ] ; then
+		# skip regular files
+		continue
+	fi
+	# TODO: Is it right to always do editable (-e) install?
+	#       Should we make it configurable?
+	set -x
+	pip install -e "$dir_item"
+	set +x
+done
+
