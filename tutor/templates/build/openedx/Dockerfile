@@ -32,6 +32,7 @@ RUN dockerize_url="https://github.com/powerman/dockerize/releases/download/$DOCK
 
 ###### Checkout edx-platform code
 FROM minimal as code
+RUN echo "break cache 3"
 ARG EDX_PLATFORM_REPOSITORY={{ EDX_PLATFORM_REPOSITORY }}
 ARG EDX_PLATFORM_VERSION={{ EDX_PLATFORM_VERSION }}
 RUN mkdir -p /openedx/edx-platform && \
