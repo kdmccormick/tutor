@@ -167,6 +167,11 @@ ENV PATH /openedx/bin:${PATH}
 
 {{ patch("openedx-dockerfile-pre-assets") }}
 
+# For the experimental new asset processing:
+# https://github.com/openedx/edx-platform/issues/31604
+ENV EDX_PLATFORM_NEW_ASSET_PROCESSING="{{ EDX_PLATFORM_NEW_ASSET_PROCESSING }}"
+ENV EDX_PLATFORM_ASSET_OPTS="--static-root /openedx/staticfiles --theme-dirs /openedx/themes"
+
 # Collect production assets. By default, only assets from the default theme
 # will be processed. This makes the docker image lighter and faster to build.
 # Only the custom themes added to /openedx/themes will be compiled.

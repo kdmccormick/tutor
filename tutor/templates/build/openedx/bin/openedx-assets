@@ -4,6 +4,7 @@ import argparse
 import os
 import subprocess
 import sys
+import shlex
 import traceback
 
 from path import Path
@@ -11,7 +12,10 @@ from path import Path
 from pavelib import assets
 
 
+DEFAULT_ENV = "prod"
+DEFAULT_SYSTEMS = ["lms", "cms"]
 DEFAULT_STATIC_ROOT = "/openedx/staticfiles"
+DEFAULT_THEMES = ["all"]
 DEFAULT_THEMES_DIR = "/openedx/themes"
 
 
@@ -25,11 +29,11 @@ def main():
     npm.set_defaults(func=run_npm)
 
     build = subparsers.add_parser("build", help="Build all assets")
-    build.add_argument("-e", "--env", choices=["prod", "dev"], default="prod")
+    build.add_argument("-e", "--env", choices=["prod", "dev"], default=DEFAULT_ENV)
     build.add_argument("--theme-dirs", nargs="+", default=[DEFAULT_THEMES_DIR])
-    build.add_argument("--themes", nargs="+", default=["all"])
+    build.add_argument("--themes", nargs="+", default=DEFAULT_THEMES)
     build.add_argument("-r", "--static-root", default=DEFAULT_STATIC_ROOT)
-    build.add_argument("--systems", nargs="+", default=["lms", "cms"])
+    build.add_argument("--systems", nargs="+", default=DEFAULT_SYSTEMS)
     build.set_defaults(func=run_build)
 
     xmodule = subparsers.add_parser("xmodule", help="Process assets from xmodule")
@@ -37,7 +41,7 @@ def main():
 
     webpack = subparsers.add_parser("webpack", help="Run webpack")
     webpack.add_argument("-r", "--static-root", default=DEFAULT_STATIC_ROOT)
-    webpack.add_argument("-e", "--env", choices=["prod", "dev"], default="prod")
+    webpack.add_argument("-e", "--env", choices=["prod", "dev"], default=DEFAULT_ENV)
     webpack.set_defaults(func=run_webpack)
 
     common = subparsers.add_parser(
@@ -86,7 +90,72 @@ def main():
     watch_themes.set_defaults(func=run_watch_themes)
 
     args = parser.parse_args()
-    args.func(args)
+    if should_use_new_implementation():
+        new_command = get_new_command(args)
+        print("Running experimental new asset processing implementation!")
+        print("You can also run this directly by using the shell command:")
+        print(shlex.join(get_new_command(args)))
+        subprocess.check_call(new_command)
+    else:
+        args.func(args)
+
+
+default_args = [
+    "--themes-dirs",
+    DEFAULT_THEMES_DIR,
+    "--static-root",
+    DEFAULT_STATIC_ROOT,
+]
+
+
+def should_use_new_implementation():
+    return os.environ.get("EDX_PLATFORM_NEW_ASSET_PROCESSING", "").lower() == "true"
+
+
+def get_new_command(args):
+    if args.func is run_collect:
+        return [
+            "bash",
+            "-c",
+            "./manage.py lms collecstatic --noinput && ./manage.py cms collecstatic --noinput",
+        ]
+    return [
+        "scripts/build-assets.sh",
+        *{
+            run_build: [],
+            run_xmodule: ["xmodule"],
+            run_npm: ["npm"],
+            run_webpack: ["webpack"],
+            run_common: ["css"],
+            run_themes: ["themes"],
+            run_watch_themes: ["--watch"]
+        }[args.func],
+        *(
+            ["--env", args.env]
+            if getattr(args, "env", DEFAULT_ENV) != DEFAULT_ENV
+            else []
+        ),
+        *(
+            ["--static-root", args.static_root]
+            if getattr(args, "static_root", DEFAULT_STATIC_ROOT) != DEFAULT_STATIC_ROOT
+            else []
+        ),
+        *(
+            ["--systems", *args.systems]
+            if set(getattr(args, "systems", DEFAULT_SYSTEMS)) != set(DEFAULT_SYSTEMS)
+            else []
+        ),
+        *(
+            ["--themes", *args.themes]
+            if set(getattr(args, "themes", DEFAULT_THEMES)) != set(DEFAULT_THEMES)
+            else []
+        ),
+        *(
+            ["--theme-dirs", *args.theme_dirs]
+            if getattr(args, "theme_dirs", [DEFAULT_THEMES_DIR]) != [DEFAULT_THEMES_DIR]
+            else []
+        ),
+    ]
 
 
 def run_build(args):
@@ -186,7 +255,6 @@ def list_subdirectories(path):
         for subpath in os.listdir(path)
         if os.path.isdir(os.path.join(path, subpath))
     ]
-
 
 class ThemeWatcher(assets.SassWatcher):
     def __init__(self, theme_dir):
