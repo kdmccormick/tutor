@@ -182,17 +182,16 @@ class BasePlugin:
             )
         # Pre-init scripts: hooks = {"pre-init": ["myservice1", "myservice2"]}
         for service in pre_init_tasks:
-            hooks.Filters.CLI_DO_INIT_TASKS.add_item(
-                (
-                    service,
-                    env.read_template_file(self.name, "hooks", service, "pre-init"),
-                ),
+            template_path = (self.name, "hooks", service, "pre-init")
+            hooks.Filters.CLI_DO_INIT_TASKS.add(
+                _make_add_task_callback(service, template_path),
                 priority=hooks.priorities.HIGH,
             )
         # Init scripts: hooks = {"init": ["myservice1", "myservice2"]}
         for service in init_tasks:
-            hooks.Filters.CLI_DO_INIT_TASKS.add_item(
-                (service, env.read_template_file(self.name, "hooks", service, "init"))
+            template_path = (self.name, "hooks", service, "init")
+            hooks.Filters.CLI_DO_INIT_TASKS.add(
+                _make_add_task_callback(service, template_path),
             )
 
     def _load_templates_root(self) -> None:
@@ -234,6 +233,18 @@ class BasePlugin:
 
     def _version(self) -> t.Optional[str]:
         return None
+
+
+def _make_add_task_callback(service: str, path: list[str]):
+    """
+    TODO
+    """
+    def add_task_callback(tasks: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        new_task = (service, env.read_template_file(*path))
+        tasks.append(new_task)
+        return tasks
+    return add_task_callback
+
 
 
 class EntrypointPlugin(BasePlugin):
