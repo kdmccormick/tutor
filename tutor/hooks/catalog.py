@@ -222,6 +222,17 @@ class Filters:
     #:   conditionally add mounts.
     COMPOSE_MOUNTS: Filter[list[tuple[str, str]], [str]] = Filter()
 
+    #: TODO describe
+    #:
+    #: TODO show example
+    #:
+    #: :parameter list[tuple[str, str, str]] populators: each item is a
+    #:   ``(image_name, path_on_image, path_in_host_mount)`` tuple. TODO finish describing.
+    #: :parameter str name: basename of the host-mounted folder. In the example above,
+    #:   this is "edx-platform". When implementing this filter you should check this name to
+    #:   conditionally add populators for this folder.
+    COMPOSE_MOUNT_POPULATORS: Filter[list[tuple[str, str, str], [str]]] = Filter()
+
     #: Declare new default configuration settings that don't necessarily have to be saved in the user
     #: ``config.yml`` file. Default settings may be overridden with ``tutor config save --set=...``, in which
     #: case they will automatically be added to ``config.yml``.
