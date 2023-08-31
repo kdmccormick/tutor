@@ -117,13 +117,13 @@ RUN cd /tmp \
 ###########################################################################################################################
 ############## FRONTEND REQUIREMENTS
 ###########################################################################################################################
-FROM python as requirements-frontend
+FROM python as frontend-requirements
 
 WORKDIR /openedx/edx-platform
 
-# Install python reqs for building assets
-RUN --mount=type=bind,from=edx-platform,source=/requirements/edx/assets.txt,target=requirements/edx/assets.txt \
-    pip install -r requirements/edx/assets.txt
+# Install python reqs for setting up node & building assets
+COPY --link --from=edx-platform /requirements/edx/assets.txt requirements/edx/assets.txt
+RUN pip install -r requirements/edx/assets.txt
 
 # Set up node env
 ENV PATH /openedx/nodeenv/bin:/openedx/venv/bin:${PATH}
@@ -131,10 +131,10 @@ RUN nodeenv /openedx/nodeenv --node=16.14.0 --prebuilt
 
 # Install nodejs requirements
 ARG NPM_REGISTRY={{ NPM_REGISTRY }}
-RUN --mount=type=bind,from=edx-platform,source=/package.json,target=package.json \
-    --mount=type=bind,from=edx-platform,source=/package-lock.json,target=package-lock.json \
-    --mount=type=bind,from=edx-platform,source=/scripts/copy-node-modules.sh,target=scripts/copy-node-modules.sh \
-    --mount=type=cache,target=/root/.npm,sharing=shared \
+COPY --link --from=edx-platform /package.json package.json
+COPY --link --from=edx-platform /package-lock.json package-lock.json
+COPY --link --from=edx-platform /scripts/copy-node-modules.sh scripts/copy-node-modules.sh
+RUN --mount=type=cache,target=/root/.npm,sharing=shared \
     npm clean-install --no-audit --registry=$NPM_REGISTRY
 
 # Set up static root.
@@ -144,157 +144,89 @@ RUN mkdir -p "$STATIC_ROOT_LMS"
 
 
 ###########################################################################################################################
-############## BUNDLES: PRODUCTION
+############## BUNDLES
 ###########################################################################################################################
-FROM requirements-frontend as bundles-production
 
-# Run webpack
-RUN --mount=type=bind,from=edx-platform,source=/package.json,target=package.json \
-    --mount=type=bind,from=edx-platform,source=/package-lock.json,target=/openedx/edx-platform/package-lock.json \
-    --mount=type=bind,from=edx-platform,source=/.babelrc,target=.babelrc \
-    --mount=type=bind,from=edx-platform,source=/webpack.common.config.js,target=webpack.common.config.js \
-    --mount=type=bind,from=edx-platform,source=/webpack-config/file-lists.js,target=webpack-config/file-lists.js \
-    --mount=type=bind,from=edx-platform,source=/webpack.dev.config.js,target=webpack.dev.config.js \
-    --mount=type=bind,from=edx-platform,source=/webpack.prod.config.js,target=webpack.prod.config.js \
-    --mount=type=bind,from=edx-platform,source=/webpack.builtinblocks.config.js,target=webpack.builtinblocks.config.js \
-    --mount=type=bind,from=edx-platform,source=/cms/djangoapps/pipeline_js/js/xmodule.js,target=cms/djangoapps/pipeline_js/js/xmodule.js \
-    --mount=type=bind,from=edx-platform,source=/cms/static,target=cms/static \
-    --mount=type=bind,from=edx-platform,source=/cms/templates/,target=cms/templates/ \
-    --mount=type=bind,from=edx-platform,source=/common/static/js/,target=common/static/js \
-    --mount=type=bind,from=edx-platform,source=/common/static/common,target=common/static/common,rw \
-    --mount=type=bind,from=requirements-frontend,source=/openedx/edx-platform/common/static/common/js/vendor,target=common/static/common/js/vendor \
-    --mount=type=bind,from=requirements-frontend,source=/openedx/edx-platform/common/static/common/css/vendor,target=common/static/common/css/vendor \
-    --mount=type=bind,from=edx-platform,source=/lms/djangoapps/discussion/static,target=lms/djangoapps/discussion/static \
-    --mount=type=bind,from=edx-platform,source=/lms/djangoapps/instructor/static,target=lms/djangoapps/instructor/static \
-    --mount=type=bind,from=edx-platform,source=/lms/djangoapps/support/static/support,target=lms/djangoapps/support/static/support \
-    --mount=type=bind,from=edx-platform,source=/lms/djangoapps/teams/static,target=lms/djangoapps/teams/static \
-    --mount=type=bind,from=edx-platform,source=/lms/static/,target=lms/static/ \
-    --mount=type=bind,from=edx-platform,source=/lms/templates/,target=lms/templates/ \
-    --mount=type=bind,from=edx-platform,source=/openedx/features/announcements/static,target=openedx/features/announcements/static \
-    --mount=type=bind,from=edx-platform,source=/openedx/features/course_bookmarks/static,target=openedx/features/course_bookmarks/static \
-    --mount=type=bind,from=edx-platform,source=/openedx/features/course_experience/static,target=openedx/features/course_experience/static \
-    --mount=type=bind,from=edx-platform,source=/openedx/features/course_search/static,target=openedx/features/course_search/static \
-    --mount=type=bind,from=edx-platform,source=/openedx/features/learner_profile/static,target=openedx/features/learner_profile/static \
-    --mount=type=bind,from=edx-platform,source=/xmodule/assets,target=xmodule/assets \
-    --mount=type=bind,from=edx-platform,source=/xmodule/js,target=xmodule/js \
-    npm run webpack
+FROM frontend-requirements as bundles
 
+COPY --link --from=edx-platform /.babelrc .babelrc
+COPY --link --from=edx-platform /webpack.common.config.js webpack.common.config.js
+COPY --link --from=edx-platform /webpack-config/file-lists.js webpack-config/file-lists.js
+COPY --link --from=edx-platform /webpack.dev.config.js webpack.dev.config.js
+COPY --link --from=edx-platform /webpack.prod.config.js webpack.prod.config.js
+COPY --link --from=edx-platform /webpack.builtinblocks.config.js webpack.builtinblocks.config.js
+COPY --link --from=edx-platform /cms/djangoapps/pipeline_js/js/xmodule.js cms/djangoapps/pipeline_js/js/xmodule.js
+COPY --link --from=edx-platform /cms/static cms/static
+COPY --link --from=edx-platform /cms/templates/ cms/templates/
+COPY --link --from=edx-platform /common/static/js/ common/static/js
+COPY --link --from=edx-platform /common/static/common common/static/common
+COPY --link --from=edx-platform /lms/djangoapps/discussion/static lms/djangoapps/discussion/static
+COPY --link --from=edx-platform /lms/djangoapps/instructor/static lms/djangoapps/instructor/static
+COPY --link --from=edx-platform /lms/djangoapps/support/static/support lms/djangoapps/support/static/support
+COPY --link --from=edx-platform /lms/djangoapps/teams/static lms/djangoapps/teams/static
+COPY --link --from=edx-platform /lms/static/ lms/static/
+COPY --link --from=edx-platform /lms/templates/ lms/templates/
+COPY --link --from=edx-platform /openedx/features/announcements/static openedx/features/announcements/static
+COPY --link --from=edx-platform /openedx/features/course_bookmarks/static openedx/features/course_bookmarks/static
+COPY --link --from=edx-platform /openedx/features/course_experience/static openedx/features/course_experience/static
+COPY --link --from=edx-platform /openedx/features/course_search/static openedx/features/course_search/static
+COPY --link --from=edx-platform /openedx/features/learner_profile/static openedx/features/learner_profile/static
+COPY --link --from=edx-platform /xmodule/assets xmodule/assets
+COPY --link --from=edx-platform /xmodule/js xmodule/js
 
-###########################################################################################################################
-############## BUNDLES: DEVELOPMENT
-###########################################################################################################################
-FROM requirements-frontend as bundles-development
+COPY --link --from=frontend-requirements /openedx/edx-platform/common/static/common/js/vendor common/static/common/js/vendor
+COPY --link --from=frontend-requirements /openedx/edx-platform/common/static/common/css/vendor common/static/common/css/vendor
 
-# Run webpack
-RUN --mount=type=bind,from=edx-platform,source=/package.json,target=package.json \
-    --mount=type=bind,from=edx-platform,source=/package-lock.json,target=/openedx/edx-platform/package-lock.json \
-    --mount=type=bind,from=edx-platform,source=/.babelrc,target=.babelrc \
-    --mount=type=bind,from=edx-platform,source=/webpack.common.config.js,target=webpack.common.config.js \
-    --mount=type=bind,from=edx-platform,source=/webpack-config/file-lists.js,target=webpack-config/file-lists.js \
-    --mount=type=bind,from=edx-platform,source=/webpack.dev.config.js,target=webpack.dev.config.js \
-    --mount=type=bind,from=edx-platform,source=/webpack.prod.config.js,target=webpack.prod.config.js \
-    --mount=type=bind,from=edx-platform,source=/webpack.builtinblocks.config.js,target=webpack.builtinblocks.config.js \
-    --mount=type=bind,from=edx-platform,source=/cms/djangoapps/pipeline_js/js/xmodule.js,target=cms/djangoapps/pipeline_js/js/xmodule.js \
-    --mount=type=bind,from=edx-platform,source=/cms/static,target=cms/static \
-    --mount=type=bind,from=edx-platform,source=/cms/templates/,target=cms/templates/ \
-    --mount=type=bind,from=edx-platform,source=/common/static/js/,target=common/static/js \
-    --mount=type=bind,from=edx-platform,source=/common/static/common,target=common/static/common,rw \
-    --mount=type=bind,from=requirements-frontend,source=/openedx/edx-platform/common/static/common/js/vendor,target=common/static/common/js/vendor \
-    --mount=type=bind,from=requirements-frontend,source=/openedx/edx-platform/common/static/common/css/vendor,target=common/static/common/css/vendor \
-    --mount=type=bind,from=edx-platform,source=/lms/djangoapps/discussion/static,target=lms/djangoapps/discussion/static \
-    --mount=type=bind,from=edx-platform,source=/lms/djangoapps/instructor/static,target=lms/djangoapps/instructor/static \
-    --mount=type=bind,from=edx-platform,source=/lms/djangoapps/support/static/support,target=lms/djangoapps/support/static/support \
-    --mount=type=bind,from=edx-platform,source=/lms/djangoapps/teams/static,target=lms/djangoapps/teams/static \
-    --mount=type=bind,from=edx-platform,source=/lms/static/,target=lms/static/ \
-    --mount=type=bind,from=edx-platform,source=/lms/templates/,target=lms/templates/ \
-    --mount=type=bind,from=edx-platform,source=/openedx/features/announcements/static,target=openedx/features/announcements/static \
-    --mount=type=bind,from=edx-platform,source=/openedx/features/course_bookmarks/static,target=openedx/features/course_bookmarks/static \
-    --mount=type=bind,from=edx-platform,source=/openedx/features/course_experience/static,target=openedx/features/course_experience/static \
-    --mount=type=bind,from=edx-platform,source=/openedx/features/course_search/static,target=openedx/features/course_search/static \
-    --mount=type=bind,from=edx-platform,source=/openedx/features/learner_profile/static,target=openedx/features/learner_profile/static \
-    --mount=type=bind,from=edx-platform,source=/xmodule/assets,target=xmodule/assets \
-    --mount=type=bind,from=edx-platform,source=/xmodule/js,target=xmodule/js \
-    npm run webpack-dev
+FROM bundles as bundles-production
+RUN npm run webpack
+
+FROM bundles as bundles-development
+RUN npm run webpack-dev
 
 
 ###########################################################################################################################
-############## CSS: PRODUCTION
+############## CSS
 ###########################################################################################################################
-FROM requirements-frontend as css-production
+
+FROM frontend-requirements as css
 
 ENV PATH ./node_modules/.bin:${PATH}
 
-# Compile default CSS
-RUN --mount=type=bind,from=edx-platform,source=/package.json,target=package.json \
-    --mount=type=bind,from=edx-platform,source=/scripts/compile_sass.py,target=scripts/compile_sass.py \
-    --mount=type=bind,from=edx-platform,source=/common/static,target=common/static \
-    --mount=type=bind,from=edx-platform,source=/lms/static/sass,target=lms/static/sass \
-    --mount=type=bind,from=edx-platform,source=/lms/static/sass/partials,target=lms/static/sass/partials \
-    --mount=type=bind,from=edx-platform,source=/lms/static/certificates/sass,target=lms/static/certificates/sass \
-    --mount=type=bind,from=edx-platform,source=/cms/static/sass,target=cms/static/sass \
-    --mount=type=bind,from=edx-platform,source=/cms/static/sass/partials,target=cms/static/sass/partials \
-    --mount=type=bind,from=edx-platform,source=/xmodule/assets,target=xmodule/assets \
-    npm run compile-sass -- --skip-themes
-
-# Compile themed CSS
-ENV EDX_PLATFORM_THEME_DIRS=/openedx/themes
-COPY --link --chown=app:app ./themes/ /openedx/themes/
-RUN --mount=type=bind,from=edx-platform,source=/package.json,target=package.json \
-    --mount=type=bind,from=edx-platform,source=/scripts/compile_sass.py,target=scripts/compile_sass.py \
-    --mount=type=bind,from=edx-platform,source=/common/static,target=common/static \
-    --mount=type=bind,from=edx-platform,source=/lms/static/sass,target=lms/static/sass \
-    --mount=type=bind,from=edx-platform,source=/lms/static/sass/partials,target=lms/static/sass/partials \
-    --mount=type=bind,from=edx-platform,source=/lms/static/certificates/sass,target=lms/static/certificates/sass \
-    --mount=type=bind,from=edx-platform,source=/cms/static/sass,target=cms/static/sass \
-    --mount=type=bind,from=edx-platform,source=/cms/static/sass/partials,target=cms/static/sass/partials \
-    --mount=type=bind,from=edx-platform,source=/xmodule/assets,target=xmodule/assets \
-    npm run compile-sass -- --skip-default
-
-
-###########################################################################################################################
-############## CSS: DEVELOPMENT
-###########################################################################################################################
-FROM requirements-frontend as css-development
-
-ENV PATH ./node_modules/.bin:${PATH}
-
+COPY --link --from=edx-platform /scripts/compile_sass.py scripts/compile_sass.py
+COPY --link --from=edx-platform /common/static common/static
+COPY --link --from=edx-platform /lms/static/sass lms/static/sass
+COPY --link --from=edx-platform /lms/static/sass/partials lms/static/sass/partials
+COPY --link --from=edx-platform /lms/static/certificates/sass lms/static/certificates/sass
+COPY --link --from=edx-platform /cms/static/sass cms/static/sass
+COPY --link --from=edx-platform /cms/static/sass/partials cms/static/sass/partials
+COPY --link --from=edx-platform /xmodule/assets xmodule/assets
 COPY --link --from=edx-platform --chown=app:app /lms/static/css/vendor lms/static/css/vendor
 
+FROM css as css-production
 # Compile default CSS
-RUN --mount=type=bind,from=edx-platform,source=/package.json,target=package.json \
-    --mount=type=bind,from=edx-platform,source=/scripts/compile_sass.py,target=scripts/compile_sass.py \
-    --mount=type=bind,from=edx-platform,source=/common/static,target=common/static \
-    --mount=type=bind,from=edx-platform,source=/lms/static/sass,target=lms/static/sass \
-    --mount=type=bind,from=edx-platform,source=/lms/static/sass/partials,target=lms/static/sass/partials \
-    --mount=type=bind,from=edx-platform,source=/lms/static/certificates/sass,target=lms/static/certificates/sass \
-    --mount=type=bind,from=edx-platform,source=/cms/static/sass,target=cms/static/sass \
-    --mount=type=bind,from=edx-platform,source=/cms/static/sass/partials,target=cms/static/sass/partials \
-    --mount=type=bind,from=edx-platform,source=/xmodule/assets,target=xmodule/assets \
-    npm run compile-sass -- --skip-themes --env=dev
-
+RUN npm run compile-sass -- --skip-themes
 # Compile themed CSS
 ENV EDX_PLATFORM_THEME_DIRS=/openedx/themes
 COPY --link --chown=app:app ./themes/ /openedx/themes/
-RUN --mount=type=bind,from=edx-platform,source=/package.json,target=package.json \
-    --mount=type=bind,from=edx-platform,source=/scripts/compile_sass.py,target=scripts/compile_sass.py \
-    --mount=type=bind,from=edx-platform,source=/common/static,target=common/static \
-    --mount=type=bind,from=edx-platform,source=/lms/static/sass,target=lms/static/sass \
-    --mount=type=bind,from=edx-platform,source=/lms/static/sass/partials,target=lms/static/sass/partials \
-    --mount=type=bind,from=edx-platform,source=/lms/static/certificates/sass,target=lms/static/certificates/sass \
-    --mount=type=bind,from=edx-platform,source=/cms/static/sass,target=cms/static/sass \
-    --mount=type=bind,from=edx-platform,source=/cms/static/sass/partials,target=cms/static/sass/partials \
-    --mount=type=bind,from=edx-platform,source=/xmodule/assets,target=xmodule/assets \
-    npm run compile-sass -- --skip-default --env=dev
+RUN npm run compile-sass -- --skip-default
+
+FROM css as css-development
+# Compile default CSS
+RUN npm run compile-sass -- --skip-themes --env=dev
+# Compile themed CSS
+ENV EDX_PLATFORM_THEME_DIRS=/openedx/themes
+COPY --link --chown=app:app ./themes/ /openedx/themes/
+RUN npm run compile-sass -- --skip-default --env=dev
 
 
 ###########################################################################################################################
-############## APPLICATION REQUIREMENTS
+############## REQUIREMENTS (both frontend + backend)
 ###########################################################################################################################
-FROM requirements-frontend as requirements-application
+FROM frontend-requirements as requirements
 
 # Install base requirements
-RUN --mount=type=bind,from=edx-platform,source=/requirements/edx/base.txt,target=/openedx/edx-platform/requirements/edx/base.txt \
-    --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
+COPY --link --from=edx-platform /requirements/edx/base.txt /openedx/edx-platform/requirements/edx/base.txt
+RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install -r /openedx/edx-platform/requirements/edx/base.txt
 
 # Install extra requirements
@@ -317,33 +249,24 @@ RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
 {% for extra_requirements in OPENEDX_EXTRA_PIP_REQUIREMENTS %}RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared pip install '{{ extra_requirements }}'
 {% endfor %}
 
-
-###########################################################################################################################
-############## PRODUCTION REQUIREMENTS
-############## Simply take the general requirements, and remove everything related to libsass.
-############## Alternatively, we could have based requirements-application on minimal, thus keeping libsass out of it,
-############## BUT that would have required requirements-development to recompile libsass, which is slow.
-###########################################################################################################################
-FROM requirements-application as requirements-production
-
+FROM requirements as requirements-production
+# To make prod requirements, we simply take the general requirements, and remove everything related to
+# libsass (which is installed via assets.txt) in order to shrink the final image. We don't need to
+# compile Sass in production.
+# Now, what we *could* have done was base this stage on minimal, thus avoiding assets.txt altogether.
+# However, this would mean that we'd have to install libsass *twice*: once for frontend-requirements and
+# once for requirements. Since libsass takes so long to compile, that doesn't seem worth it.
 RUN rm -r /openedx/venv/lib/python3.8/site-packages/*sass*
 
-
-###########################################################################################################################
-############## DEVELOPMENT REQUIREMENTS
-###########################################################################################################################
-FROM requirements-application as requirements-development
-
-# Install dev requirements
-RUN --mount=type=bind,from=edx-platform,source=/requirements/edx/development.txt,target=/openedx/edx-platform/requirements/edx/development.txt \
-    --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
+FROM requirements as requirements-development
+# Install dev requirements.
+COPY --link --from=edx-platform /requirements/edx/development.txt /openedx/edx-platform/requirements/edx/development.txt
+RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install -r /openedx/edx-platform/requirements/edx/development.txt
 
 
 ###########################################################################################################################
-############## APPLICATION
-############## Application image with system and python requirements.
-############## Basis for final prod and dev images.
+############## APPLICATION (base for final production and development images)
 ###########################################################################################################################
 FROM minimal as application
 
@@ -395,16 +318,16 @@ RUN cd /openedx/locale/user && \
     django-admin compilemessages -v1
 
 # Copy in frontend requirements.
-COPY --link --chown=app:app --from=requirements-frontend \
+COPY --link --chown=app:app --from=frontend-requirements \
 	/openedx/nodeenv \
 	/openedx/nodeenv
-COPY --link --chown=app:app --from=requirements-frontend \
+COPY --link --chown=app:app --from=frontend-requirements \
 	/openedx/edx-platform/node_modules \
 	/openedx/edx-platform/node_modules
-COPY --link --chown=app:app --from=requirements-frontend \
+COPY --link --chown=app:app --from=frontend-requirements \
    /openedx/edx-platform/common/static/common/js/vendor \
    /openedx/edx-platform/common/static/common/js/vendor
-COPY --link --chown=app:app --from=requirements-frontend \
+COPY --link --chown=app:app --from=frontend-requirements \
 	/openedx/edx-platform/common/static/common/css/vendor \
 	/openedx/edx-platform/common/static/common/css/vendor
 
