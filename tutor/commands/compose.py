@@ -20,6 +20,7 @@ from tutor.core.hooks import Filter  # pylint: disable=unused-import
 from tutor.exceptions import TutorError
 from tutor.tasks import BaseComposeTaskRunner
 from tutor.types import Config
+from tutor.utils import execute as execute_shell
 
 
 class ComposeTaskRunner(BaseComposeTaskRunner):
@@ -113,6 +114,10 @@ def launch(
     if pullimages:
         click.echo(fmt.title("Docker image updates"))
         context.invoke(dc_command, command="pull")
+
+    if bindmount.get_mounts(config):
+        click.echo(fmt.title("Copying build artifacts into bind-mounted directories"))
+        context.invoke(copyartifacts)
 
     click.echo(fmt.title("Starting the platform in detached mode"))
     context.invoke(start, detach=True)
@@ -366,6 +371,80 @@ def copyfrom(
 
 
 @click.command(
+    help="TODO describe"
+)
+@click.argument(
+    "mount_paths",
+    metavar="mount_path",
+    nargs=-1,
+    type=click.Path(dir_okay=True, file_okay=False, resolve_path=True),
+)
+@click.pass_obj
+def copyartifacts(context: BaseComposeContext, mount_paths: list[Path]) -> None:
+    """
+    TODO write docstring
+    """
+    config = tutor_config.load(context.root)
+    host_mount_paths: list[str] = [
+        os.path.abspath(os.path.expanduser(mount_path))
+        for mount_path
+        in mount_paths or bindmount.get_mounts(config)
+    ]
+
+    # Sort out the (source, target) pairs by service name so that we can
+    # work one-at-a-time later.
+    copies_by_service: dict[str, tuple[str, str]] = {}
+    container_mounts_by_service: dict[str, list[str]] = {}
+    for host_mount_path in host_mount_paths:
+        mount_name = os.path.basename(host_mount_path)
+        for service, container_mount_path in hooks.Filters.COMPOSE_MOUNTS.iterate(mount_name):
+            for path_in_mount in hooks.Filters.COMPOSE_MOUNT_ARTIFACTS.iterate(mount_name, service):
+                source = f"{container_mount_path}/{path_in_mount}"
+                target = f"{host_mount_path}/{path_in_mount}"
+                copies_by_service.setdefault(service, []).append((source, target))
+                container_mounts_by_service.setdefault(service, []).append(container_mount_path)
+
+    container_name = "tutor_mounts_populate_temp" # TODO: improve name?
+    runner = context.job_runner(config)
+
+    # For each service: create a temporary container, do the copy operations, and then kill the container.
+    for service, copies in copies_by_service.items():
+        execute_shell("docker", "rm", "-f", container_name)
+        runner.docker_compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--user=0",
+            # Recall that these artifact source directories may actually be bind-mounted into
+            # into the service from the host, which would prevent us from copying the original
+            # image's artifacts!
+            # To work around this, we shadow each relevant bind-mount with a fresh anonymous volume,
+            # which Docker populates with the image's original contents.
+            # The volume creation takes a bit of time, so we avoid using this shadowing strategy
+            # on any bind-mounts that aren't relevant to the operation.
+            *(
+                f"--volume={container_mount_path}"
+                for container_mount_path in set(container_mounts_by_service[service])
+            ),
+            # Give the container a predetermined name so we can refer to it later.
+            "--name",
+            container_name,
+            # Run in the backround.
+            "--detach",
+            service,
+            # Rather than starting the service's real command, save some CPU by just sleeping
+            # until killed.
+            "sleep",
+            "infinity",
+        )
+        for source, target in copies:
+            execute_shell("rm", "-rf", target)                                   # Wipe any existing artifact.
+            execute_shell("sh", "-c", f'mkdir -p "$(dirname "{target}")"')       # Ensure parent dirs exist.
+            execute_shell("docker", "cp", f"{container_name}:{source}", target)  # Actually do the copy.
+    execute_shell("sh", "-c", f"docker kill '{container_name}' || true")
+
+
+@click.command(
     short_help="Run a command in a running container",
     help=(
         "Run a command in a running container. This is a wrapper around `docker compose exec`. Any option or argument"
@@ -447,6 +526,27 @@ def _mount_edx_platform(
     return volumes
 
 
+@hooks.Filters.COMPOSE_MOUNT_ARTIFACTS.add()
+def _populate_edx_platform(
+    paths_to_copy: list[str], mount_name: str, service: str
+) -> list[tuple[str, str]]:
+    """
+    TODO describe
+    """
+    if mount_name == "edx-platform" and service == "lms":
+        paths_to_copy += [
+            "Open_edX.egg-info",
+            "node_modules",
+            "lms/static/css",
+            "lms/static/certificates/css",
+            "cms/static/css",
+            "common/static/bundles",
+            "common/static/common/js/vendor",
+            "common/static/common/css/vendor",
+        ]
+    return paths_to_copy
+
+
 @hooks.Filters.APP_PUBLIC_HOSTS.add()
 def _edx_platform_public_hosts(
     hosts: list[str], context_name: t.Literal["local", "dev"]
@@ -471,6 +571,7 @@ def add_commands(command_group: click.Group) -> None:
     command_group.add_command(dc_command)
     command_group.add_command(run)
     command_group.add_command(copyfrom)
+    command_group.add_command(copyartifacts)
     command_group.add_command(execute)
     command_group.add_command(logs)
     command_group.add_command(status)
