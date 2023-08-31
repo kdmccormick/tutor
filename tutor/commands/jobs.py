@@ -43,6 +43,15 @@ def _add_core_init_tasks() -> None:
         )
     with hooks.Contexts.app("lms").enter():
         hooks.Filters.CLI_DO_INIT_TASKS.add_item(
+            (
+                "lms",
+                env.read_core_template_file("jobs", "init", "mounted-edx-platform.sh"),
+            ),
+            # If edx-platform is mounted, then we may need to perform some setup
+            # before other initialization scripts can be run.
+            priority=priorities.HIGH,
+        )
+        hooks.Filters.CLI_DO_INIT_TASKS.add_item(
             ("lms", env.read_core_template_file("jobs", "init", "lms.sh"))
         )
     with hooks.Contexts.app("cms").enter():
