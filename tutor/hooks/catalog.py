@@ -222,6 +222,32 @@ class Filters:
     #:   conditionally add mounts.
     COMPOSE_MOUNTS: Filter[list[tuple[str, str]], [str]] = Filter()
 
+    #: Relative paths of build artifacts, to be copied into a host-mounted folder from a service image.
+    #:
+    #: Docker images contain many build artifacts, such as generated assets and packaging metadata, which
+    #: must exist at runtime in order for services to run properly. When a user bind-mounts a directory
+    #: from their host machine, there is no guarantee that the host directory will contain those essential
+    #: artifacts, and regenerating them from source may be time consuming. To remedy this, Tutor provides
+    #: the ``copyartifacts`` command, which efficiently copies the necessary artifacts from the original image
+    #: into the host directory. This command is also automatically run as part of ``launch``.
+    #:
+    #: The ``COMPOSE_MOUNT_ARTIFACTS`` filter tells Tutor which artifacts must be copied from which
+    #: service for any given host-mounted directory. By default, for edx-platform, this includes
+    #: several directories such as ``node_modules`` and ``lms/static/css``, to be copied from the lms
+    #: service's image.
+    #:
+    #: Note that any given artifact should only be specified once in this filter. If an artifact
+    #: exists on an image used by multiple services, choose one of those service for it to be
+    #: copied from.
+    #:
+    #: :parameter artifacts list[str]: files or directories considered build artifacts for the given
+    #:   host-mounted folder in the given service. Paths must be relative to the mount directory.
+    #: :parameter str mount_name: basename of a host-mounted folder.
+    #: :parameter service: name of a service from which artifackts will be copied. The ``COMPOSE_MOUNTS``
+    #:   filter should map ``mount_name`` somewhere in this container; that mount location will be used
+    #:   as the source for ``artifacts``.
+    COMPOSE_MOUNT_ARTIFACTS: Filter[list[str], [str, str]] = Filter()
+
     #: Declare new default configuration settings that don't necessarily have to be saved in the user
     #: ``config.yml`` file. Default settings may be overridden with ``tutor config save --set=...``, in which
     #: case they will automatically be added to ``config.yml``.
