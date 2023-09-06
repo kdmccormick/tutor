@@ -531,7 +531,8 @@ def _populate_edx_platform(
     paths_to_copy: list[str], mount_name: str, service: str
 ) -> list[tuple[str, str]]:
     """
-    TODO describe
+    Mark setup.py output, node_modules, and generated static assets as artifacts
+    of LMS, so that they can be copied into a bind-mounted edx-platform.
     """
     if mount_name == "edx-platform" and service == "lms":
         paths_to_copy += [
