@@ -513,16 +513,34 @@ def _mount_edx_platform(
     When mounting edx-platform with `tutor mounts add /path/to/edx-platform`,
     bind-mount the host repo in the lms/cms containers.
     """
+    PACKAGE_MOUNT_PREFIXES = {
+        "lib-",
+        "openedx-",
+        "django-",
+        "platform-plugin-",
+        "xblock-",
+    }
+    openedx_services = [
+        "lms",
+        "cms",
+        "lms-worker",
+        "cms-worker",
+        "lms-job",
+        "cms-job",
+    ]
     if name == "edx-platform":
         path = "/openedx/edx-platform"
         volumes += [
-            ("lms", path),
-            ("cms", path),
-            ("lms-worker", path),
-            ("cms-worker", path),
-            ("lms-job", path),
-            ("cms-job", path),
+            (service, "/openedx/edx-platform")
+            for service in openedx_services
         ]
+    for prefix in PACKAGE_MOUNT_PREFIXES:
+        if name.startswith(prefix):
+            volumes += [
+                (service, f"/openedx/packages/{name}")
+                for service in openedx_services
+            ]
+            break
     return volumes
 
 

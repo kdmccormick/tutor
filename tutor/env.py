@@ -19,6 +19,22 @@ BIN_FILE_EXTENSIONS = [".ico", ".jpg", ".patch", ".png", ".ttf", ".woff", ".woff
 JinjaFilter = t.Callable[..., t.Any]
 
 
+def _get_mounted_packages() -> t.Iterable[tuple[str, str]]:
+    """
+    kyle todo: this is kludge, rewrite it once POC works.
+    """
+    import os.path
+    import tutor.config
+    config = tutor.config.load("/home/kyle/tutor-root")
+    for host_path in config.get("MOUNTS") or []: 
+        for _image, stage in hooks.Filters.IMAGES_BUILD_MOUNTS.iterate(host_path):
+            if stage.startswith("mounted-package-"):
+                dirname = os.path.basename(host_path)
+                yield stage, f"/openedx/packages/{dirname}"
+            break
+
+
+
 def _prepare_environment() -> None:
     """
     Prepare environment by adding core data to filters.
@@ -55,6 +71,7 @@ def _prepare_environment() -> None:
             ("TUTOR_APP", __app__.replace("-", "_")),
             ("TUTOR_VERSION", __version__),
             ("is_buildkit_enabled", lambda: True),  # Will be removed soon.
+            ("get_mounted_packages", _get_mounted_packages),
         ],
     )
 

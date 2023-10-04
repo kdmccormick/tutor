@@ -276,9 +276,23 @@ def _mount_edx_platform(
     Automatically add an edx-platform repo from the host to the build context whenever
     it is added to the `MOUNTS` setting.
     """
-    if os.path.basename(path) == "edx-platform":
+    PACKAGE_MOUNT_PREFIXES = {
+        "lib-",
+        "django-",
+        "openedx-",
+        "platform-plugin-",
+        "xblock-",
+    }
+    dirname = os.path.basename(path)
+    if dirname == "edx-platform":
         volumes.append(("openedx", "edx-platform"))
         volumes.append(("openedx-dev", "edx-platform"))
+    for prefix in PACKAGE_MOUNT_PREFIXES:
+        if dirname.startswith(prefix):
+            stage = f"mounted-package-{dirname}"
+            volumes.append(("openedx", stage))
+            volumes.append(("openedx-dev", stage))
+            break
     return volumes
 
 

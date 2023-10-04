@@ -101,6 +101,17 @@ COPY --from=code /openedx/edx-platform /
 
 
 ###########################################################################################################################
+############## MOUNTED PACKAGES
+############## One Tutor-generated stage for each bind-mounted edx-platform Python package,
+############## holding nothing but the package directory's contents.
+###########################################################################################################################
+{% for mounted_package_stage, mounted_package_target in get_mounted_packages() %}
+FROM scratch as {{ mounted_package_stage }}
+{% endfor %}
+
+
+
+###########################################################################################################################
 ############## LOCALES
 ###########################################################################################################################
 ###### Download extra locales to /openedx/locale/contrib/locale
@@ -255,6 +266,12 @@ RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
 {% for extra_requirements in OPENEDX_EXTRA_PIP_REQUIREMENTS %}RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared pip install '{{ extra_requirements }}'
 {% endfor %}
 
+# Install mounted packages; this is useful for testing local package changes.
+{% for mounted_package_stage, mounted_package_target in get_mounted_packages() %}
+COPY --link --from={{ mounted_package_stage }} / {{ mounted_package_target }}
+RUN pip install -e {{ mounted_package_target }}
+{% endfor %}
+
 FROM requirements as requirements-production
 # To make prod requirements, we simply take the general requirements, and remove everything related to
 # libsass (which is installed via assets.txt) in order to shrink the final image. We don't need to
@@ -298,6 +315,7 @@ COPY --link --chown=app:app --from=locales /openedx/locale /openedx/locale
 COPY --link --chown=app:app --from=python /opt/pyenv /opt/pyenv
 COPY --link --chown=app:app --from=requirements-production /openedx/venv /openedx/venv
 COPY --link --chown=app:app --from=requirements-production /openedx/requirements /openedx/requirements
+COPY --link --chown=app:app --from=requirements-production /openedx/packages /openedx/packages
 
 ENV PATH /openedx/venv/bin:./node_modules/.bin:/openedx/nodeenv/bin:${PATH}
 ENV VIRTUAL_ENV /openedx/venv/
