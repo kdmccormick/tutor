@@ -44,7 +44,7 @@ click-log==0.4.0
     # via scriv
 coverage==7.3.0
     # via -r requirements/dev.in
-cryptography==41.0.3
+cryptography==41.0.4
     # via secretstorage
 dill==0.3.7
     # via pylint
@@ -62,7 +62,7 @@ importlib-metadata==6.8.0
     # via
     #   keyring
     #   twine
-importlib-resources==6.0.1
+importlib-resources==6.1.0
     # via keyring
 isort==5.12.0
     # via pylint
@@ -215,7 +215,7 @@ typing-extensions==4.7.1
     #   mypy
     #   pylint
     #   rich
-urllib3==1.26.16
+urllib3==1.26.17
     # via
     #   -r requirements/base.txt
     #   google-auth
