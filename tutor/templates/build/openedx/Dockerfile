@@ -267,6 +267,7 @@ RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
 {% endfor %}
 
 # Install mounted packages; this is useful for testing local package changes.
+RUN mkdir -p /openedx/packages
 {% for mounted_package_stage, mounted_package_target in get_mounted_packages() %}
 COPY --link --from={{ mounted_package_stage }} / {{ mounted_package_target }}
 RUN pip install -e {{ mounted_package_target }}
