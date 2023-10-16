@@ -224,6 +224,9 @@ RUN npm run compile-sass -- --skip-default --env=dev
 ###########################################################################################################################
 FROM frontend-requirements as requirements
 
+# Install missing py2neo package that was abruptly trimmed from pypi
+RUN pip install https://github.com/overhangio/py2neo/releases/download/2021.2.3/py2neo-2021.2.3.tar.gz
+
 # Install base requirements
 COPY --link --from=edx-platform /requirements/edx/base.txt /openedx/edx-platform/requirements/edx/base.txt
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
@@ -280,7 +283,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # Note that this must always be different from root (APP_USER_ID=0)
 ARG APP_USER_ID=1000
 RUN if [ "$APP_USER_ID" = 0 ]; then echo "app user may not be root" && false; fi
-RUN useradd --home-dir /openedx --create-home --shell /bin/bash --uid ${APP_USER_ID} app
+RUN useradd --no-log-init --home-dir /openedx --create-home --shell /bin/bash --uid ${APP_USER_ID} app
 USER ${APP_USER_ID}
 
 # Copy in backend code and requirements.
