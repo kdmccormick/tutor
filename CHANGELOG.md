@@ -20,6 +20,19 @@ instructions, because git commits are used to generate release notes:
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-16.1.4'></a>
+## v16.1.4 (2023-10-13)
+
+- [Improvement] No more large dev images. This was fixed by adding `--no-log-init` option to useradd command and reducing space usage of `/var/log/faillog`. (by @CodeWithEmad)
+- [Improvement] Upgrade the Open edX default version to open-release/palm.3. (by @regisb)
+
+<a id='changelog-16.1.3'></a>
+## v16.1.3 (2023-10-10)
+
+- [Improvement] Adds `connect=False` to the LMS and CMS' MongoDB connection to prevent `ServerSelectionError` after a cluster failover. (by @open-craft)
+- [Bugfix] Override `CMS_BASE` setting in Studio for the development environment. Without this, parts of Studio will try to use the devstack default of localhost:8010 instead. (by @ormsbee)
+- [Bugfix] Fix build error caused by py2neo package that was abruptly pulled from pypi and GitHub. (by @regisb)
+
 <a id='changelog-16.1.2'></a>
 ## v16.1.2 (2023-10-02)
 
