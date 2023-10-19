@@ -137,10 +137,12 @@ COPY --link --from=edx-platform /scripts/copy-node-modules.sh scripts/copy-node-
 RUN --mount=type=cache,target=/root/.npm,sharing=shared \
     npm clean-install --no-audit --registry=$NPM_REGISTRY
 
-# Set up static root.
+# Set up static root and themes root.
 # By default, CMS static root is assumed to be $STUDIO_ROOT_LMS/studio.
 ENV STATIC_ROOT_LMS=/openedx/staticfiles
 RUN mkdir -p "$STATIC_ROOT_LMS"
+ENV EDX_PLATFORM_THEME_DIRS=/openedx/themes
+RUN mkdir -p "$EDX_PLATFORM_THEME_DIRS"
 
 
 ###########################################################################################################################
@@ -206,7 +208,6 @@ FROM css as css-production
 # Compile default CSS
 RUN npm run compile-sass -- --skip-themes
 # Compile themed CSS
-ENV EDX_PLATFORM_THEME_DIRS=/openedx/themes
 COPY --link --chown=app:app ./themes/ /openedx/themes/
 RUN npm run compile-sass -- --skip-default
 
@@ -214,7 +215,6 @@ FROM css as css-development
 # Compile default CSS
 RUN npm run compile-sass -- --skip-themes --env=dev
 # Compile themed CSS
-ENV EDX_PLATFORM_THEME_DIRS=/openedx/themes
 COPY --link --chown=app:app ./themes/ /openedx/themes/
 RUN npm run compile-sass -- --skip-default --env=dev
 
