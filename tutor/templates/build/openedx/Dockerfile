@@ -262,10 +262,14 @@ FROM requirements as requirements-production
 RUN rm -r /openedx/venv/lib/python3.8/site-packages/*sass*
 
 FROM requirements as requirements-development
-# Install dev requirements.
+
+# Install dev requirements, plus ipdb and ipython for an improved debugging experience.
 COPY --link --from=edx-platform /requirements/edx/development.txt /openedx/edx-platform/requirements/edx/development.txt
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
-    pip install -r /openedx/edx-platform/requirements/edx/development.txt
+    pip install \
+        -r /openedx/edx-platform/requirements/edx/development.txt \
+        ipdb==0.13.13 \
+        ipython==8.12.0
 
 
 ###########################################################################################################################
@@ -300,8 +304,9 @@ ENV PATH /openedx/venv/bin:./node_modules/.bin:/openedx/nodeenv/bin:${PATH}
 ENV VIRTUAL_ENV /openedx/venv/
 WORKDIR /openedx/edx-platform
 
-# We install edx-platform here because it creates an egg-info folder in the current
-# repo. We need both the source code and the virtualenv to run this command.
+# Install the local edx-platform repo. This:
+# (1) creates an egg-info folder which is necessary to enable entrypoints like XBlocks, and
+# (2) points the virtualenv at the local edx-platform repo.
 RUN pip install -e .
 
 # Create folder that will store lms/cms.env.yml files, as well as
@@ -401,13 +406,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt install -y vim iputils-ping dnsutils telnet
 USER app
 
-# Copy in dev python requirements
+# Copy in dev python requirements.
+# (This forces us to re-install the local edx-platform repo as well.)
 COPY --link --chown=app:app --from=requirements-development /openedx/venv /openedx/venv
-
-# https://pypi.org/project/ipdb/
-# https://pypi.org/project/ipython
-RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
-    pip install ipdb==0.13.13 ipython==8.12.0
+RUN pip install -e .
 
 # Add ipdb as default PYTHONBREAKPOINT
 ENV PYTHONBREAKPOINT=ipdb.set_trace
