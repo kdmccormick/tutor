@@ -224,9 +224,7 @@ def build(
 
             # Registry cache
             if not no_registry_cache:
-                image_build_args.append(
-                    f"--cache-from=type=registry,ref={tag}-cache"
-                )
+                image_build_args.append(f"--cache-from=type=registry,ref={tag}-cache")
             if cache_to_registry:
                 image_build_args.append(
                     f"--cache-to=type=registry,mode=max,ref={tag}-cache"

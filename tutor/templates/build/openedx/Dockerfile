@@ -113,7 +113,6 @@ RUN cd /tmp \
     && rm -rf openedx-i18n*
 
 
-
 ###########################################################################################################################
 ############## FRONTEND REQUIREMENTS
 ###########################################################################################################################
@@ -249,7 +248,9 @@ RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     && touch ./private.txt \
     && pip install -r ./private.txt
 
-{% for extra_requirements in OPENEDX_EXTRA_PIP_REQUIREMENTS %}RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared pip install '{{ extra_requirements }}'
+{% for extra_requirements in OPENEDX_EXTRA_PIP_REQUIREMENTS %}
+RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
+    pip install '{{ extra_requirements }}'
 {% endfor %}
 
 FROM requirements as requirements-production
