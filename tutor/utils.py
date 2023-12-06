@@ -173,6 +173,20 @@ def docker(*command: str) -> int:
     return execute("docker", *command)
 
 
+@lru_cache(maxsize=None)
+def is_docker_rootless() -> bool:
+    """
+    A helper function to determine if Docker is running in rootless mode.
+
+     - https://docs.docker.com/engine/security/rootless/
+    """
+    try:
+        results = subprocess.run(["docker", "info"], capture_output=True, check=True)
+        return "rootless" in results.stdout.decode()
+    except subprocess.CalledProcessError:
+        return False
+
+
 def docker_compose(*command: str) -> int:
     return execute("docker", "compose", *command)
 
@@ -236,7 +250,7 @@ def warn_macos_docker_memory() -> None:
     {e}
 
 Tutor may not work if Docker is configured with < 4 GB RAM. Please follow instructions from:
-    https://docs.tutor.overhang.io/install.html"""
+    https://docs.tutor.edly.io/install.html"""
         )
 
 
