@@ -316,7 +316,7 @@ COPY --link --chown=app:app ./themes/ /openedx/themes/
 COPY --link --chown=app:app --from=locales /openedx/locale /openedx/locale
 COPY --link --chown=app:app --from=python /opt/pyenv /opt/pyenv
 COPY --link --chown=app:app --from=requirements-production /openedx/venv /openedx/venv
-COPY --chown=app:app --from=python-requirements /mnt /mnt
+COPY --link --chown=app:app --from=requirements-production /mnt /mnt
 
 ENV PATH /openedx/venv/bin:./node_modules/.bin:/openedx/nodeenv/bin:${PATH}
 ENV VIRTUAL_ENV /openedx/venv/
@@ -427,6 +427,7 @@ USER app
 # Copy in dev python requirements.
 # (This forces us to re-install the local edx-platform repo as well.)
 COPY --link --chown=app:app --from=requirements-development /openedx/venv /openedx/venv
+COPY --link --chown=app:app --from=requirements-development /mnt /mnt
 RUN pip install -e .
 
 # Add ipdb as default PYTHONBREAKPOINT
