@@ -1,8 +1,8 @@
 from __future__ import annotations
-from copy import deepcopy
-import typing as t
 
 import os
+import typing as t
+from copy import deepcopy
 
 from tutor import env, exceptions, fmt, hooks, plugins, serialize, utils
 from tutor.types import Config, ConfigValue, cast_config, get_typed
@@ -150,18 +150,6 @@ def _load_config_defaults_yml(
 ) -> list[tuple[str, t.Any]]:
     defaults = get_template("defaults.yml")
     items += list(defaults.items())
-    return items
-
-
-@hooks.Filters.CONFIG_DEFAULTS.add()
-def _set_openedx_common_version_in_nightly(
-    items: list[tuple[str, t.Any]]
-) -> list[tuple[str, t.Any]]:
-    # REMOVE-AFTER-v16 move this callback to the dedicated openedx/plugin.py module
-    from tutor.__about__ import __version_suffix__
-
-    if __version_suffix__ == "nightly":
-        items.append(("OPENEDX_COMMON_VERSION", "master"))
     return items
 
 
@@ -328,7 +316,9 @@ def _enable_plugins(root: str) -> None:
     enable_plugins(config)
 
 
-@hooks.Actions.PLUGIN_UNLOADED.add()
+# This is run with a very high priority such that it is called before the plugin hooks
+# are actually cleared.
+@hooks.Actions.PLUGIN_UNLOADED.add(priority=hooks.priorities.HIGH - 1)
 def _remove_plugin_config_overrides_on_unload(
     plugin: str, _root: str, config: Config
 ) -> None:
@@ -342,7 +332,7 @@ def _remove_plugin_config_overrides_on_unload(
         fmt.echo_info(f"    config - removing entry: {key}={value}")
 
 
-@hooks.Actions.PLUGIN_UNLOADED.add(priority=100)
+@hooks.Actions.PLUGIN_UNLOADED.add(priority=hooks.priorities.LOW)
 def _update_enabled_plugins_on_unload(_plugin: str, _root: str, config: Config) -> None:
     """
     Update the list of enabled plugins.

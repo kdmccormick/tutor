@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.4
+# syntax=docker/dockerfile:1
 
 
 ###########################################################################################################################
@@ -41,7 +41,9 @@ ENV XDG_CACHE_HOME /openedx/.cache
 # Install pyenv
 # https://www.python.org/downloads/
 # https://github.com/pyenv/pyenv/releases
-RUN git clone https://github.com/pyenv/pyenv $PYENV_ROOT --branch v2.3.17 --depth 1
+ARG PYTHON_VERSION=3.8.18
+ENV PYENV_ROOT /opt/pyenv
+RUN git clone https://github.com/pyenv/pyenv $PYENV_ROOT --branch v2.3.29 --depth 1
 
 # Install Python
 RUN $PYENV_ROOT/bin/pyenv install $PYTHON_VERSION
@@ -55,7 +57,7 @@ RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     # https://pypi.org/project/setuptools/
     # https://pypi.org/project/pip/
     # https://pypi.org/project/wheel/
-    setuptools==67.6.1 pip==23.0.1. wheel==0.40.0
+    setuptools==68.2.2 pip==23.2.1. wheel==0.41.2
 
 
 ###########################################################################################################################
@@ -100,17 +102,25 @@ COPY --from=code /openedx/edx-platform /
 
 
 ###########################################################################################################################
-############## LOCALES
+############## MNT-*
+############## Create an empty layer for each bind-mounted directory relevant to our image.
 ###########################################################################################################################
-###### Download extra locales to /openedx/locale/contrib/locale
+{% for name in iter_mounted_directories(MOUNTS, "openedx") %}
+FROM scratch as mnt-{{ name }}
+{% endfor %}
+
+
+###########################################################################################################################
+############## LOCALES
+############## Download extra locales to /openedx/locale/contrib/locale
+###########################################################################################################################
 FROM minimal as locales
-ARG OPENEDX_I18N_VERSION={{ OPENEDX_COMMON_VERSION }}
-RUN cd /tmp \
-    && curl -L -o openedx-i18n.tar.gz https://github.com/openedx/openedx-i18n/archive/$OPENEDX_I18N_VERSION.tar.gz \
-    && tar xzf /tmp/openedx-i18n.tar.gz \
-    && mkdir -p /openedx/locale/contrib \
-    && mv openedx-i18n-*/edx-platform/locale /openedx/locale/contrib \
-    && rm -rf openedx-i18n*
+ARG OPENEDX_I18N_REPOSITORY=https://github.com/openedx/openedx-i18n.git
+ARG OPENEDX_I18N_VERSION=release/quince
+ADD --keep-git-dir=true $OPENEDX_I18N_REPOSITORY#$OPENEDX_I18N_VERSION /tmp/openedx-i18n
+RUN mkdir --parents /openedx/locale && \
+    mv /tmp/openedx-i18n/edx-platform/locale /openedx/locale/contrib && \
+    rm -rf /tmp/openedx-i18n/
 
 
 ###########################################################################################################################
@@ -219,58 +229,65 @@ RUN npm run compile-sass -- --skip-default --env=dev
 
 
 ###########################################################################################################################
-############## REQUIREMENTS (both frontend + backend)
+############## REQUIREMENTS (frontend+backend)
 ###########################################################################################################################
+
+# Start with frontend requirements already installed.
 FROM frontend-requirements as requirements
 
-# Install missing py2neo package that was abruptly trimmed from pypi
-RUN pip install https://github.com/overhangio/py2neo/releases/download/2021.2.3/py2neo-2021.2.3.tar.gz
-
-# Install base requirements
+# Install:
+# * base Python packages from edx-platform,
+# * Redis as a django cache (https://pypi.org/project/django-redis/),
+# * the uWSGI server (https://pypi.org/project/uWSGI/),
+# * and the SCORM XBlock.
 COPY --link --from=edx-platform /requirements/edx/base.txt /openedx/edx-platform/requirements/edx/base.txt
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
-    pip install -r /openedx/edx-platform/requirements/edx/base.txt
-
-# Install extra requirements
-RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install \
-    # Use redis as a django cache https://pypi.org/project/django-redis/
-    django-redis==5.2.0 \
-    # uwsgi server https://pypi.org/project/uWSGI/
-    uwsgi==2.0.21
+	    -r /openedx/edx-platform/requirements/edx/base.txt \
+        'django-redis==5.4.0' \
+        'uwsgi==2.0.22' \
+        'openedx-scorm-xblock>=17.0.0,<18.0.0'
 
 {{ patch("openedx-dockerfile-post-python-requirements") }}
 
-# Install private requirements: this is useful for installing custom xblocks.
-COPY --link ./requirements/ /openedx/requirements
-RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
-    cd /openedx/requirements/ \
-    && touch ./private.txt \
-    && pip install -r ./private.txt
-
+# Install extra Python packages provided by user config.
 {% for extra_requirements in OPENEDX_EXTRA_PIP_REQUIREMENTS %}
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install '{{ extra_requirements }}'
 {% endfor %}
 
 FROM requirements as requirements-production
-# To make prod requirements, we simply take the general requirements, and remove everything related to
-# libsass (which is installed via assets.txt) in order to shrink the final image. We don't need to
-# compile Sass in production.
+
+# Remove everything related to libsass (which is installed via assets.txt) in order to shrink the final prod image.
+# This is safe because we don't need to compile Sass in production.
 # Now, what we *could* have done was base this stage on minimal, thus avoiding assets.txt altogether.
 # However, this would mean that we'd have to install libsass *twice*: once for frontend-requirements and
 # once for requirements. Since libsass takes so long to compile, that doesn't seem worth it.
 RUN rm -r /openedx/venv/lib/python3.8/site-packages/*sass*
 
+# Install auto-mounted directories as Python packages.
+{% for name in iter_mounted_directories(MOUNTS, "openedx") %}
+COPY --from=mnt-{{ name }} --chown=app:app / /mnt/{{ name }}
+RUN pip install -e "/mnt/{{ name }}"
+{% endfor %}
+
 FROM requirements as requirements-development
 
-# Install dev requirements, plus ipdb and ipython for an improved debugging experience.
+# Install edx-platform's dev requirements, plus ipdb and ipython for an improved debugging experience.
 COPY --link --from=edx-platform /requirements/edx/development.txt /openedx/edx-platform/requirements/edx/development.txt
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install \
         -r /openedx/edx-platform/requirements/edx/development.txt \
         ipdb==0.13.13 \
-        ipython==8.12.0
+        ipython==8.12.3
+
+# Install auto-mounted directories as Python packages.
+# This must be done after installing development.txt, otherwise the pins in development.txt would
+# supersede the auto-mounted packages.
+{% for name in iter_mounted_directories(MOUNTS, "openedx-dev") %}
+COPY --from=mnt-{{ name }} --chown=app:app / /mnt/{{ name }}
+RUN pip install -e "/mnt/{{ name }}"
+{% endfor %}
 
 
 ###########################################################################################################################
@@ -299,7 +316,7 @@ COPY --link --chown=app:app ./themes/ /openedx/themes/
 COPY --link --chown=app:app --from=locales /openedx/locale /openedx/locale
 COPY --link --chown=app:app --from=python /opt/pyenv /opt/pyenv
 COPY --link --chown=app:app --from=requirements-production /openedx/venv /openedx/venv
-COPY --link --chown=app:app --from=requirements-production /openedx/requirements /openedx/requirements
+COPY --chown=app:app --from=python-requirements /mnt /mnt
 
 ENV PATH /openedx/venv/bin:./node_modules/.bin:/openedx/nodeenv/bin:${PATH}
 ENV VIRTUAL_ENV /openedx/venv/

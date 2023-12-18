@@ -3,7 +3,7 @@ from typing import List, Optional
 import click
 
 from . import config as tutor_config
-from . import env, exceptions, fmt
+from . import env, exceptions, fmt, hooks
 from .types import Config, get_typed
 
 
@@ -18,7 +18,10 @@ def ask_questions(config: Config, run_for_prod: Optional[bool] = None) -> None:
     """
     defaults = tutor_config.get_defaults()
     if run_for_prod is None:
-        run_for_prod = config.get("LMS_HOST") != "local.overhang.io"
+        run_for_prod = not config.get("LMS_HOST") in [
+            "local.edly.io",
+            "local.overhang.io",
+        ]
         run_for_prod = click.confirm(
             fmt.question(
                 "Are you configuring a production platform? "
@@ -29,8 +32,8 @@ def ask_questions(config: Config, run_for_prod: Optional[bool] = None) -> None:
         )
     if not run_for_prod:
         dev_values: Config = {
-            "LMS_HOST": "local.overhang.io",
-            "CMS_HOST": "studio.local.overhang.io",
+            "LMS_HOST": "local.edly.io",
+            "CMS_HOST": "studio.local.edly.io",
             "ENABLE_HTTPS": False,
         }
         fmt.echo_info(
@@ -145,6 +148,8 @@ def ask_questions(config: Config, run_for_prod: Optional[bool] = None) -> None:
             config,
             defaults,
         )
+
+    hooks.Actions.CONFIG_INTERACTIVE.do(config)
 
 
 def ask(question: str, key: str, config: Config, defaults: Config) -> None:
