@@ -383,6 +383,7 @@ def copyfrom(
 def copyartifacts(context: BaseComposeContext, mount_paths: list[Path]) -> None:
     """
     TODO write docstring
+    TODO move this to `tutor images build <IMAGE> --populate` ??
     """
     config = tutor_config.load(context.root)
     host_mount_paths: list[str] = [
@@ -391,57 +392,39 @@ def copyartifacts(context: BaseComposeContext, mount_paths: list[Path]) -> None:
         in mount_paths or bindmount.get_mounts(config)
     ]
 
-    # Sort out the (source, target) pairs by service name so that we can
-    # work one-at-a-time later.
-    copies_by_service: dict[str, tuple[str, str]] = {}
-    container_mounts_by_service: dict[str, list[str]] = {}
+    # Sort out the (source, target) pairs by image name so that we can work one-at-a-time later.
+    copies_by_image: dict[str, tuple[str, str]] = {}
     for host_mount_path in host_mount_paths:
         mount_name = os.path.basename(host_mount_path)
-        for service, container_mount_path in hooks.Filters.COMPOSE_MOUNTS.iterate(mount_name):
-            for path_in_mount in hooks.Filters.COMPOSE_MOUNT_ARTIFACTS.iterate(mount_name, service):
+        for image, container_mount_path in hooks.Filters.COMPOSE_MOUNTS.iterate(mount_name):
+            if image != "openedx-dev":
+                # TODO just do openedx-dev for now -- will generalize this soon.
+                continue
+            for path_in_mount in hooks.Filters.IMAGES_BUILD_MOUNT_ARTIFACTS.iterate(mount_name, image):
                 source = f"{container_mount_path}/{path_in_mount}"
                 target = f"{host_mount_path}/{path_in_mount}"
-                copies_by_service.setdefault(service, []).append((source, target))
-                container_mounts_by_service.setdefault(service, []).append(container_mount_path)
+                copies_by_image.setdefault(image, []).append((source, target))
 
     container_name = "tutor_mounts_populate_temp" # TODO: improve name?
     runner = context.job_runner(config)
 
-    # For each service: create a temporary container, do the copy operations, and then kill the container.
-    for service, copies in copies_by_service.items():
+    # For each image: create a temporary container, do the copy operations, and then rm the container.
+    if not copies_by_image:
+        fmt.echo_alert("Nothing to copy.")
+        return
+    for image, copies in copies_by_image.items():
         execute_shell("docker", "rm", "-f", container_name)
-        runner.docker_compose(
-            "run",
-            "--rm",
-            "--no-deps",
-            "--user=0",
-            # Recall that these artifact source directories may actually be bind-mounted into
-            # into the service from the host, which would prevent us from copying the original
-            # image's artifacts!
-            # To work around this, we shadow each relevant bind-mount with a fresh anonymous volume,
-            # which Docker populates with the image's original contents.
-            # The volume creation takes a bit of time, so we avoid using this shadowing strategy
-            # on any bind-mounts that aren't relevant to the operation.
-            *(
-                f"--volume={container_mount_path}"
-                for container_mount_path in set(container_mounts_by_service[service])
-            ),
-            # Give the container a predetermined name so we can refer to it later.
-            "--name",
-            container_name,
-            # Run in the backround.
-            "--detach",
-            service,
-            # Rather than starting the service's real command, save some CPU by just sleeping
-            # until killed.
-            "sleep",
-            "infinity",
-        )
+        for name, _, tag, __ in hooks.Filters.IMAGES_BUILD.iterate(config):
+            if name == image:
+                execute_shell("docker", "create", "--name", container_name, tag)
+                break
+        else:
+            raise ValueError(f"unknown image name: {name}")
         for source, target in copies:
             execute_shell("rm", "-rf", target)                                   # Wipe any existing artifact.
             execute_shell("sh", "-c", f'mkdir -p "$(dirname "{target}")"')       # Ensure parent dirs exist.
             execute_shell("docker", "cp", f"{container_name}:{source}", target)  # Actually do the copy.
-    execute_shell("sh", "-c", f"docker kill '{container_name}' || true")
+    execute_shell("docker", "rm", "-f", container_name)
 
 
 @click.command(
@@ -503,28 +486,6 @@ def dc_command(
 ) -> None:
     config = tutor_config.load(context.root)
     context.job_runner(config).docker_compose(command, *args)
-
-
-
-@hooks.Filters.COMPOSE_MOUNT_ARTIFACTS.add()
-def _populate_edx_platform(
-    paths_to_copy: list[str], mount_name: str, service: str
-) -> list[tuple[str, str]]:
-    """
-    TODO describe
-    """
-    if mount_name == "edx-platform" and service == "lms":
-        paths_to_copy += [
-            "Open_edX.egg-info",
-            "node_modules",
-            "lms/static/css",
-            "lms/static/certificates/css",
-            "cms/static/css",
-            "common/static/bundles",
-            "common/static/common/js/vendor",
-            "common/static/common/css/vendor",
-        ]
-    return paths_to_copy
 
 
 @hooks.Filters.APP_PUBLIC_HOSTS.add()

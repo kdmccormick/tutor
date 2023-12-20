@@ -45,6 +45,27 @@ def _mount_edx_platform_build(
     return volumes
 
 
+@hooks.Filters.IMAGES_BUILD_MOUNT_ARTIFACTS.add()
+def _populate_edx_platform(
+    paths_to_copy: list[str], mount_name: str, image: str
+) -> list[tuple[str, str]]:
+    """
+    TODO describe
+    """
+    if mount_name == "edx-platform" and image in ["openedx", "openedx-dev"]:
+        paths_to_copy += [
+            "Open_edX.egg-info",
+            "node_modules",
+            "lms/static/css",
+            "lms/static/certificates/css",
+            "cms/static/css",
+            "common/static/bundles",
+            "common/static/common/js/vendor",
+            "common/static/common/css/vendor",
+        ]
+    return paths_to_copy
+
+
 @hooks.Filters.COMPOSE_MOUNTS.add()
 def _mount_edx_platform_compose(
     volumes: list[tuple[str, str]], name: str
@@ -56,19 +77,21 @@ def _mount_edx_platform_compose(
     if name == "edx-platform":
         path = "/openedx/edx-platform"
         volumes.append(("openedx", path))
+        volumes.append(("openedx-dev", path))
     return volumes
 
 
 # Auto-magically bind-mount xblock directories and some common dependencies.
-hooks.Filters.MOUNTED_DIRECTORIES.add_items(
-    [
-        ("openedx", r".*[xX][bB]lock.*"),
-        ("openedx", "edx-enterprise"),
-        ("openedx", "edx-ora2"),
-        ("openedx", "edx-search"),
-        ("openedx", r"platform-plugin-.*"),
-    ]
-)
+for openedx_image in ["openedx", "openedx-dev"]:
+    hooks.Filters.MOUNTED_DIRECTORIES.add_items(
+        [
+            (openedx_image, r".*[xX][bB]lock.*"),
+            (openedx_image, "edx-enterprise"),
+            (openedx_image, "edx-ora2"),
+            (openedx_image, "edx-search"),
+            (openedx_image, r"platform-plugin-.*"),
+        ]
+    )
 
 
 @hooks.Filters.MOUNTED_DIRECTORIES.add(priority=hooks.priorities.LOW)
