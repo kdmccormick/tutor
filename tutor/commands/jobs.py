@@ -154,6 +154,55 @@ python ./manage.py cms import ../data /tmp/course/{repo_dir}
     yield ("cms", template)
 
 
+# REMOVE-AFTER-V17: importdemocourse should be replaced what is now importnewdemocourse,
+#                   and importnewdemocourse should be removed.
+@click.command(help="Preview the new demo course (official in v18)")
+@click.option(
+    "-r",
+    "--repo",
+    default="https://github.com/openedx/openedx-demo-course-new",
+    show_default=True,
+    help="Git repository that contains the course & library to be imported",
+)
+@click.option(
+    "-d",
+    "--repo-dir",
+    default="demo-course",
+    show_default=True,
+    help="Git relative subdirectory to import course data from",
+)
+@click.option(
+    "-l",
+    "--library-tar",
+    default="dist/demo-content-library.tar.gz",
+    show_default=True,
+    help="Git relative .tar.gz path to import demo content library from"
+)
+@click.option(
+    "-L",
+    "--library-owner",
+    show_default=True,
+    help="Name of a user to set as owner of the library. If omitted, library will not be imported",
+)
+@click.option(
+    "-v",
+    "--version",
+    help="Git branch, tag or sha1 identifier. If unspecified, will default to latest.",
+)
+def importnewdemocourse(
+    repo: str, repo_dir: str, library_tar: str, library_owner: t.Optional[str], version: t.Optional[str]
+) -> t.Iterable[tuple[str, str]]:
+    version = version or "main"  # In Redwood, this should become {{ OPENEDX_COMMON_VERSION }}
+    template = f"git clone {repo} --branch {version} --depth 1 /tmp/course"
+    if library_owner:
+        template += f"\n./manage.py cms import_content_library ../data/{library_tar} /temp/course/{library_tar}"
+    else:
+        template += "\necho 'WARNING: Skipped demo library import because --library-owner was not provided.'"
+    template += f"\npython ./manage.py cms import ../data /tmp/course/{repo_dir}"
+    template += f"\n./manage.py cms reindex_course --all --setup"
+    yield ("cms", template)
+
+
 @click.command(
     name="print-edx-platform-setting",
     help="Print the value of an edx-platform Django setting.",
@@ -324,6 +373,7 @@ hooks.Filters.CLI_DO_COMMANDS.add_items(
     [
         createuser,
         importdemocourse,
+        importnewdemocourse,
         initialise,
         print_edx_platform_setting,
         settheme,

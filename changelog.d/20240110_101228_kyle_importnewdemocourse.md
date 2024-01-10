@@ -1,0 +1,1 @@
+- [Feature] The brand new Open edX Demo Course and Demo Content Library can be imported with `tutor local do importnewdemocourse`! In v18, the `tutor local do importdemocourse` command will be updated to use this new demo course as well. (by @kdmccormick)
