@@ -88,10 +88,6 @@ RUN curl -fsSL https://github.com/openedx/edx-platform/commit/89f5f69682a5e1422f
 {# Example: RUN curl -fsSL https://github.com/openedx/edx-platform/commit/<GITSHA1>.patch | git am #}
 {{ patch("openedx-dockerfile-post-git-checkout") }}
 
-# TODO: Temporary
-# Apply these edx-platform changes which have not yet merged.
-RUN curl -fsSL https://github.com/openedx/edx-platform/pull/32835.patch | git am
-
 
 ###########################################################################################################################
 ############## EDX-PLATFORM
