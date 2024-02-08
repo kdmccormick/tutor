@@ -113,19 +113,6 @@ FROM scratch as mnt-{{ name }}
 
 
 ###########################################################################################################################
-############## LOCALES
-############## Download extra locales to /openedx/locale/contrib/locale
-###########################################################################################################################
-FROM minimal as locales
-ARG OPENEDX_I18N_REPOSITORY=https://github.com/openedx/openedx-i18n.git
-ARG OPENEDX_I18N_VERSION=release/quince
-ADD --keep-git-dir=true $OPENEDX_I18N_REPOSITORY#$OPENEDX_I18N_VERSION /tmp/openedx-i18n
-RUN mkdir --parents /openedx/locale && \
-    mv /tmp/openedx-i18n/edx-platform/locale /openedx/locale/contrib && \
-    rm -rf /tmp/openedx-i18n/
-
-
-###########################################################################################################################
 ############## FRONTEND REQUIREMENTS
 ###########################################################################################################################
 FROM python as frontend-requirements
@@ -315,7 +302,6 @@ USER ${APP_USER_ID}
 COPY --link --from=docker.io/powerman/dockerize:0.19.0 /usr/local/bin/dockerize /usr/local/bin/dockerize
 COPY --link --chown=app:app --from=edx-platform / /openedx/edx-platform
 COPY --link --chown=app:app ./themes/ /openedx/themes/
-COPY --link --chown=app:app --from=locales /openedx/locale /openedx/locale
 COPY --link --chown=app:app --from=python /opt/pyenv /opt/pyenv
 COPY --link --chown=app:app --from=requirements-production /openedx/venv /openedx/venv
 COPY --link --chown=app:app --from=requirements-production /mnt /mnt
@@ -339,12 +325,6 @@ ENV REVISION_CFG /openedx/config/revisions.yml
 COPY --chown=app:app settings/lms/*.py ./lms/envs/tutor/
 COPY --chown=app:app settings/cms/*.py ./cms/envs/tutor/
 
-# Copy user-specific locales to /openedx/locale/user/locale and compile them
-RUN mkdir /openedx/locale/user
-COPY --chown=app:app ./locale/ /openedx/locale/user/locale/
-RUN cd /openedx/locale/user && \
-    django-admin compilemessages -v1
-
 # Copy in frontend requirements.
 COPY --link --chown=app:app --from=frontend-requirements \
 	/openedx/nodeenv \
@@ -359,9 +339,10 @@ COPY --link --chown=app:app --from=frontend-requirements \
 	/openedx/edx-platform/common/static/common/css/vendor \
 	/openedx/edx-platform/common/static/common/css/vendor
 
-# Compile i18n strings: in some cases, js locales are not properly compiled out of the box
-# and we need to do a pass ourselves. Also, we need to compile the djangojs.js files for
-# the downloaded locales.
+# Pull latest translations via atlas
+RUN atlas pull --repository='{{ ATLAS_REPOSITORY }}' --branch='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }} \
+    translations/edx-platform/conf/locale:conf/locale
+RUN ./manage.py lms --settings=tutor.i18n compilemessages -v1
 RUN ./manage.py lms --settings=tutor.i18n compilejsi18n
 RUN ./manage.py cms --settings=tutor.i18n compilejsi18n
 
