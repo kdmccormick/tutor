@@ -32,32 +32,31 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     xz-utils tk-dev libffi-dev liblzma-dev python-openssl git \
     software-properties-common libmysqlclient-dev libxmlsec1-dev libgeos-dev
 
-ARG PYTHON_VERSION=3.8.15
+ARG PYTHON_VERSION=3.11.8
+ENV PATH /openedx/venv/bin:./node_modules/.bin:/openedx/nodeenv/bin:${PATH}
 ENV PYENV_ROOT /opt/pyenv
-ENV PATH /openedx/venv/bin:${PATH}
 ENV VIRTUAL_ENV /openedx/venv/
 ENV XDG_CACHE_HOME /openedx/.cache
+ENV COMPREHENSIVE_THEME_DIRS /openedx/themes
+ENV STATIC_ROOT_LMS /openedx/staticfiles
+ENV STATIC_ROOT_CMS /openedx/staticfiles/studio
 
-# Install pyenv
-# https://www.python.org/downloads/
-# https://github.com/pyenv/pyenv/releases
-ARG PYTHON_VERSION=3.8.18
-ENV PYENV_ROOT /opt/pyenv
-RUN git clone https://github.com/pyenv/pyenv $PYENV_ROOT --branch v2.3.29 --depth 1
+# Install pyenv (https://github.com/pyenv/pyenv/releases)
+RUN git clone https://github.com/pyenv/pyenv $PYENV_ROOT --branch v2.3.36 --depth 1
 
-# Install Python
+# Install Python (https://www.python.org/downloads/)
 RUN $PYENV_ROOT/bin/pyenv install $PYTHON_VERSION
 
 # Create virtualenv
 RUN $PYENV_ROOT/versions/$PYTHON_VERSION/bin/python -m venv /openedx/venv
 
-# Install the right version of pip/setuptools
+# Install the right version of pip/setuptools/wheel
+#    https://pypi.org/project/setuptools/
+#    https://pypi.org/project/pip/
+#    https://pypi.org/project/wheel/
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install \
-    # https://pypi.org/project/setuptools/
-    # https://pypi.org/project/pip/
-    # https://pypi.org/project/wheel/
-    setuptools==68.2.2 pip==23.2.1. wheel==0.41.2
+    setuptools==69.1.1 pip==24.0 wheel==0.43.0
 
 
 ###########################################################################################################################
@@ -124,7 +123,7 @@ RUN pip install -r requirements/edx/assets.txt
 
 # Set up node env
 ENV PATH /openedx/nodeenv/bin:/openedx/venv/bin:${PATH}
-RUN nodeenv /openedx/nodeenv --node=16.14.0 --prebuilt
+RUN nodeenv /openedx/nodeenv --node=18.20.1 --prebuilt
 
 # Install nodejs requirements
 ARG NPM_REGISTRY={{ NPM_REGISTRY }}
@@ -133,13 +132,6 @@ COPY --link --from=edx-platform /package-lock.json package-lock.json
 COPY --link --from=edx-platform /scripts/copy-node-modules.sh scripts/copy-node-modules.sh
 RUN --mount=type=cache,target=/root/.npm,sharing=shared \
     npm clean-install --no-audit --registry=$NPM_REGISTRY
-
-# Set up static root and themes root.
-# By default, CMS static root is assumed to be $STUDIO_ROOT_LMS/studio.
-ENV STATIC_ROOT_LMS=/openedx/staticfiles
-RUN mkdir -p "$STATIC_ROOT_LMS"
-ENV EDX_PLATFORM_THEME_DIRS=/openedx/themes
-RUN mkdir -p "$EDX_PLATFORM_THEME_DIRS"
 
 
 ###########################################################################################################################
@@ -217,7 +209,7 @@ RUN npm run compile-sass -- --skip-default --env=dev
 
 
 ###########################################################################################################################
-############## REQUIREMENTS (frontend+backend)
+############## FULL REQUIREMENTS
 ###########################################################################################################################
 
 # Start with frontend requirements already installed.
@@ -232,8 +224,8 @@ COPY --link --from=edx-platform /requirements/edx/base.txt /openedx/edx-platform
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install \
 	    -r /openedx/edx-platform/requirements/edx/base.txt \
-        'django-redis==5.4.0' \
-        'uwsgi==2.0.22' \
+        django-redis==5.4.0 \
+        uwsgi==2.0.24 \
         'openedx-scorm-xblock>=17.0.0,<18.0.0'
 
 {{ patch("openedx-dockerfile-post-python-requirements") }}
@@ -262,12 +254,14 @@ RUN pip install -e "/mnt/{{ name }}"
 FROM requirements as requirements-development
 
 # Install edx-platform's dev requirements, plus ipdb and ipython for an improved debugging experience.
+#   https://pypi.org/project/ipdb/
+#   https://pypi.org/project/ipython (>=Python 3.10 started with 8.20)
 COPY --link --from=edx-platform /requirements/edx/development.txt /openedx/edx-platform/requirements/edx/development.txt
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install \
         -r /openedx/edx-platform/requirements/edx/development.txt \
         ipdb==0.13.13 \
-        ipython==8.12.3
+        ipython==8.24.0
 
 # Install auto-mounted directories as Python packages.
 # This must be done after installing development.txt, otherwise the pins in development.txt would
@@ -281,7 +275,7 @@ RUN pip install -e "/mnt/{{ name }}"
 ###########################################################################################################################
 ############## APPLICATION (base for final production and development images)
 ###########################################################################################################################
-FROM minimal as application
+FROM python as application
 
 # Install system requirements
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -305,8 +299,6 @@ COPY --link --chown=app:app --from=python /opt/pyenv /opt/pyenv
 COPY --link --chown=app:app --from=requirements-production /openedx/venv /openedx/venv
 COPY --link --chown=app:app --from=requirements-production /mnt /mnt
 
-ENV PATH /openedx/venv/bin:./node_modules/.bin:/openedx/nodeenv/bin:${PATH}
-ENV VIRTUAL_ENV /openedx/venv/
 WORKDIR /openedx/edx-platform
 
 # Install the local edx-platform repo. This:
@@ -337,13 +329,7 @@ COPY --link --chown=app:app --from=frontend-requirements \
 COPY --link --chown=app:app --from=frontend-requirements \
 	/openedx/edx-platform/common/static/common/css/vendor \
 	/openedx/edx-platform/common/static/common/css/vendor
-
-# Pull latest translations via atlas
-RUN atlas pull --repository='{{ ATLAS_REPOSITORY }}' --branch='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }} \
-    translations/edx-platform/conf/locale:conf/locale
-RUN ./manage.py lms --settings=tutor.i18n compilemessages -v1
-RUN ./manage.py lms --settings=tutor.i18n compilejsi18n
-RUN ./manage.py cms --settings=tutor.i18n compilejsi18n
+RUN npm run postinstall
 
 # Copy scripts
 COPY --link --chown=app:app ./bin /openedx/bin
@@ -365,6 +351,19 @@ EXPOSE 8000
 ############## PRODUCTION
 ###########################################################################################################################
 FROM application as production
+
+# Pull latest translations via atlas
+RUN ./manage.py lms --settings=tutor.i18n pull_plugin_translations --verbose --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
+RUN ./manage.py lms --settings=tutor.i18n pull_xblock_translations --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
+RUN atlas pull --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }} \
+    translations/edx-platform/conf/locale:conf/locale \
+    translations/studio-frontend/src/i18n/messages:conf/plugins-locale/studio-frontend
+RUN ./manage.py lms --settings=tutor.i18n compile_xblock_translations
+RUN ./manage.py cms --settings=tutor.i18n compile_xblock_translations
+RUN ./manage.py lms --settings=tutor.i18n compile_plugin_translations
+RUN ./manage.py lms --settings=tutor.i18n compilemessages -v1
+RUN ./manage.py lms --settings=tutor.i18n compilejsi18n
+RUN ./manage.py cms --settings=tutor.i18n compilejsi18n
 
 # Copy in and collect production static assets.
 COPY --link --chown=app:app --from=bundles-production /openedx/staticfiles /openedx/staticfiles
@@ -415,7 +414,6 @@ RUN pip install -e .
 # Add ipdb as default PYTHONBREAKPOINT
 ENV PYTHONBREAKPOINT=ipdb.set_trace
 
-# Copy in development static assets.
 # In development mode, edx-platform expects the files to be in the repo, and pointed to by webpack-stats.json.
 COPY --link --chown=app:app --from=bundles-development /openedx/staticfiles/webpack-stats.json /openedx/staticfiles/webpack-stats.json
 COPY --link --chown=app:app --from=bundles-development /openedx/staticfiles/studio/webpack-stats.json /openedx/staticfiles/studio/webpack-stats.json

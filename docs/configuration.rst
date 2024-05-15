@@ -75,7 +75,7 @@ This configuration parameter defines which Caddy Docker image to use.
 
 This configuration parameter defines which Elasticsearch Docker image to use.
 
-- ``DOCKER_IMAGE_MONGODB`` (default: ``"docker.io/mongo:4.4.22"``)
+- ``DOCKER_IMAGE_MONGODB`` (default: ``"docker.io/mongo:7.0.7"``)
 
 This configuration parameter defines which MongoDB Docker image to use.
 
@@ -87,7 +87,7 @@ This configuration parameter defines which MySQL Docker image to use.
 
 .. https://hub.docker.com/_/redis/tags
 
-- ``DOCKER_IMAGE_REDIS`` (default: ``"docker.io/redis:7.0.11"``)
+- ``DOCKER_IMAGE_REDIS`` (default: ``"docker.io/redis:7.2.4"``)
 
 This configuration parameter defines which Redis Docker image to use.
 

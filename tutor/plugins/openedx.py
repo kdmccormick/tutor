@@ -88,6 +88,7 @@ for openedx_image in ["openedx", "openedx-dev"]:
             (openedx_image, "edx-enterprise"),
             (openedx_image, "edx-ora2"),
             (openedx_image, "edx-search"),
+            (openedx_image, "openedx-learning"),
             (openedx_image, r"platform-plugin-.*"),
         ]
     )
