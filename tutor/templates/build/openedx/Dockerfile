@@ -367,23 +367,6 @@ RUN ./manage.py cms collectstatic --noinput --settings=tutor.assets
 # De-dupe static assets with synlinks
 RUN rdfind -makesymlinks true -followsymlinks true /openedx/staticfiles/
 
-# Build & collect production assets. By default, only assets from the default theme
-# will be processed. This makes the docker image lighter and faster to build.
-RUN npm run postinstall  # Postinstall artifacts are stuck in nodejs-requirements layer. Create them here too.
-RUN npm run compile-sass -- --skip-themes
-RUN npm run webpack
-
-# Now that the default theme is built, build any custom themes
-COPY --chown=app:app ./themes/ /openedx/themes
-RUN npm run compile-sass -- --skip-default
-
-# and finally, collect assets for the production image,
-# de-duping assets with symlinks.
-RUN ./manage.py lms collectstatic --noinput --settings=tutor.assets && \
-    ./manage.py cms collectstatic --noinput --settings=tutor.assets && \
-    # De-duplicate static assets with symlinks \
-    rdfind -makesymlinks true -followsymlinks true /openedx/staticfiles/
-
 # Copy the default uWSGI configuration
 COPY --chown=app:app settings/uwsgi.ini .
 
