@@ -98,7 +98,7 @@ RUN curl -fsSL https://github.com/openedx/edx-platform/commit/ad201cd664b6c722cb
 ############## docker build --build-context edx-platform=/path/to/edx-platform
 ###########################################################################################################################
 FROM scratch as edx-platform
-COPY --link --from=code /openedx/edx-platform /
+COPY --from=code /openedx/edx-platform /
 
 
 ###########################################################################################################################
@@ -118,7 +118,7 @@ FROM python as frontend-requirements
 WORKDIR /openedx/edx-platform
 
 # Install python reqs for setting up node & building assets
-COPY --link --from=edx-platform /requirements/edx/assets.txt requirements/edx/assets.txt
+COPY --from=edx-platform /requirements/edx/assets.txt requirements/edx/assets.txt
 RUN pip install -r requirements/edx/assets.txt
 
 # Set up node env
@@ -127,9 +127,9 @@ RUN nodeenv /openedx/nodeenv --node=18.20.1 --prebuilt
 
 # Install nodejs requirements
 ARG NPM_REGISTRY={{ NPM_REGISTRY }}
-COPY --link --from=edx-platform /package.json package.json
-COPY --link --from=edx-platform /package-lock.json package-lock.json
-COPY --link --from=edx-platform /scripts/copy-node-modules.sh scripts/copy-node-modules.sh
+COPY --from=edx-platform /package.json package.json
+COPY --from=edx-platform /package-lock.json package-lock.json
+COPY --from=edx-platform /scripts/copy-node-modules.sh scripts/copy-node-modules.sh
 RUN --mount=type=cache,target=/root/.npm,sharing=shared \
     npm clean-install --no-audit --registry=$NPM_REGISTRY
 
@@ -140,33 +140,33 @@ RUN --mount=type=cache,target=/root/.npm,sharing=shared \
 
 FROM frontend-requirements as bundles
 
-COPY --link --from=edx-platform /.babelrc .babelrc
-COPY --link --from=edx-platform /webpack-config/file-lists.js webpack-config/file-lists.js
-COPY --link --from=edx-platform /webpack.builtinblocks.config.js webpack.builtinblocks.config.js
-COPY --link --from=edx-platform /webpack.common.config.js webpack.common.config.js
-COPY --link --from=edx-platform /webpack.dev.config.js webpack.dev.config.js
-COPY --link --from=edx-platform /webpack.prod.config.js webpack.prod.config.js
-COPY --link --from=edx-platform /cms/djangoapps/pipeline_js/js cms/djangoapps/pipeline_js/js
-COPY --link --from=edx-platform /cms/static cms/static
-COPY --link --from=edx-platform /cms/templates/ cms/templates/
-COPY --link --from=edx-platform /common/static/common common/static/common
-COPY --link --from=edx-platform /common/static/js/ common/static/js
-COPY --link --from=edx-platform /lms/djangoapps/discussion/static lms/djangoapps/discussion/static
-COPY --link --from=edx-platform /lms/djangoapps/instructor/static lms/djangoapps/instructor/static
-COPY --link --from=edx-platform /lms/djangoapps/support/static/support lms/djangoapps/support/static/support
-COPY --link --from=edx-platform /lms/djangoapps/teams/static lms/djangoapps/teams/static
-COPY --link --from=edx-platform /lms/static/ lms/static/
-COPY --link --from=edx-platform /lms/templates/ lms/templates/
-COPY --link --from=edx-platform /openedx/features/announcements/static openedx/features/announcements/static
-COPY --link --from=edx-platform /openedx/features/course_bookmarks/static openedx/features/course_bookmarks/static
-COPY --link --from=edx-platform /openedx/features/course_experience/static openedx/features/course_experience/static
-COPY --link --from=edx-platform /openedx/features/course_search/static openedx/features/course_search/static
-COPY --link --from=edx-platform /openedx/features/learner_profile/static openedx/features/learner_profile/static
-COPY --link --from=edx-platform /xmodule/assets xmodule/assets
-COPY --link --from=edx-platform /xmodule/js xmodule/js
+COPY --from=edx-platform /.babelrc .babelrc
+COPY --from=edx-platform /webpack-config/file-lists.js webpack-config/file-lists.js
+COPY --from=edx-platform /webpack.builtinblocks.config.js webpack.builtinblocks.config.js
+COPY --from=edx-platform /webpack.common.config.js webpack.common.config.js
+COPY --from=edx-platform /webpack.dev.config.js webpack.dev.config.js
+COPY --from=edx-platform /webpack.prod.config.js webpack.prod.config.js
+COPY --from=edx-platform /cms/djangoapps/pipeline_js/js cms/djangoapps/pipeline_js/js
+COPY --from=edx-platform /cms/static cms/static
+COPY --from=edx-platform /cms/templates/ cms/templates/
+COPY --from=edx-platform /common/static/common common/static/common
+COPY --from=edx-platform /common/static/js/ common/static/js
+COPY --from=edx-platform /lms/djangoapps/discussion/static lms/djangoapps/discussion/static
+COPY --from=edx-platform /lms/djangoapps/instructor/static lms/djangoapps/instructor/static
+COPY --from=edx-platform /lms/djangoapps/support/static/support lms/djangoapps/support/static/support
+COPY --from=edx-platform /lms/djangoapps/teams/static lms/djangoapps/teams/static
+COPY --from=edx-platform /lms/static/ lms/static/
+COPY --from=edx-platform /lms/templates/ lms/templates/
+COPY --from=edx-platform /openedx/features/announcements/static openedx/features/announcements/static
+COPY --from=edx-platform /openedx/features/course_bookmarks/static openedx/features/course_bookmarks/static
+COPY --from=edx-platform /openedx/features/course_experience/static openedx/features/course_experience/static
+COPY --from=edx-platform /openedx/features/course_search/static openedx/features/course_search/static
+COPY --from=edx-platform /openedx/features/learner_profile/static openedx/features/learner_profile/static
+COPY --from=edx-platform /xmodule/assets xmodule/assets
+COPY --from=edx-platform /xmodule/js xmodule/js
 
-COPY --link --from=frontend-requirements /openedx/edx-platform/common/static/common/js/vendor common/static/common/js/vendor
-COPY --link --from=frontend-requirements /openedx/edx-platform/common/static/common/css/vendor common/static/common/css/vendor
+COPY --from=frontend-requirements /openedx/edx-platform/common/static/common/js/vendor common/static/common/js/vendor
+COPY --from=frontend-requirements /openedx/edx-platform/common/static/common/css/vendor common/static/common/css/vendor
 
 FROM bundles as bundles-production
 RUN npm run webpack
@@ -183,28 +183,24 @@ FROM frontend-requirements as css
 
 ENV PATH ./node_modules/.bin:${PATH}
 
-COPY --link --from=edx-platform /scripts/compile_sass.py scripts/compile_sass.py
-COPY --link --from=edx-platform /common/static common/static
-COPY --link --from=edx-platform /lms/static/sass lms/static/sass
-COPY --link --from=edx-platform /lms/static/sass/partials lms/static/sass/partials
-COPY --link --from=edx-platform /lms/static/certificates/sass lms/static/certificates/sass
-COPY --link --from=edx-platform /cms/static/sass cms/static/sass
-COPY --link --from=edx-platform /cms/static/sass/partials cms/static/sass/partials
-COPY --link --from=edx-platform /xmodule/assets xmodule/assets
-COPY --link --from=edx-platform /lms/static/css/vendor lms/static/css/vendor
+COPY --from=edx-platform /scripts/compile_sass.py scripts/compile_sass.py
+COPY --from=edx-platform /common/static common/static
+COPY --from=edx-platform /lms/static/sass lms/static/sass
+COPY --from=edx-platform /lms/static/sass/partials lms/static/sass/partials
+COPY --from=edx-platform /lms/static/certificates/sass lms/static/certificates/sass
+COPY --from=edx-platform /cms/static/sass cms/static/sass
+COPY --from=edx-platform /cms/static/sass/partials cms/static/sass/partials
+COPY --from=edx-platform /xmodule/assets xmodule/assets
+COPY --from=edx-platform /lms/static/css/vendor lms/static/css/vendor
 
 FROM css as css-production
-# Compile default CSS
 RUN npm run compile-sass -- --skip-themes
-# Compile themed CSS
-COPY --link ./themes/ /openedx/themes/
+COPY ./themes/ /openedx/themes/
 RUN npm run compile-sass -- --skip-default
 
 FROM css as css-development
-# Compile default CSS
 RUN npm run compile-sass -- --skip-themes --env=dev
-# Compile themed CSS
-COPY --link ./themes/ /openedx/themes/
+COPY ./themes/ /openedx/themes/
 RUN npm run compile-sass -- --skip-default --env=dev
 
 
@@ -220,7 +216,7 @@ FROM frontend-requirements as requirements
 # * Redis as a django cache (https://pypi.org/project/django-redis/),
 # * the uWSGI server (https://pypi.org/project/uWSGI/),
 # * and the SCORM XBlock.
-COPY --link --from=edx-platform /requirements/edx/base.txt /openedx/edx-platform/requirements/edx/base.txt
+COPY --from=edx-platform /requirements/edx/base.txt /openedx/edx-platform/requirements/edx/base.txt
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install \
         -r /openedx/edx-platform/requirements/edx/base.txt \
@@ -249,7 +245,7 @@ FROM requirements as requirements-development
 # Install edx-platform's dev requirements, plus ipdb and ipython for an improved debugging experience.
 #   https://pypi.org/project/ipdb/
 #   https://pypi.org/project/ipython (>=Python 3.10 started with 8.20)
-COPY --link --from=edx-platform /requirements/edx/development.txt /openedx/edx-platform/requirements/edx/development.txt
+COPY --from=edx-platform /requirements/edx/development.txt /openedx/edx-platform/requirements/edx/development.txt
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install \
         -r /openedx/edx-platform/requirements/edx/development.txt \
