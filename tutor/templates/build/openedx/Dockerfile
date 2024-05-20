@@ -243,7 +243,7 @@ FROM requirements as requirements-production
 # Now, what we *could* have done was base this stage on minimal, thus avoiding assets.txt altogether.
 # However, this would mean that we'd have to install libsass *twice*: once for frontend-requirements and
 # once for requirements. Since libsass takes so long to compile, that doesn't seem worth it.
-RUN rm -r /openedx/venv/lib/python3.8/site-packages/*sass*
+RUN rm -r /openedx/venv/lib/python3.11/site-packages/*sass*
 
 # Install auto-mounted directories as Python packages.
 {% for name in iter_mounted_directories(MOUNTS, "openedx") %}
