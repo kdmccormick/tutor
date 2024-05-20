@@ -281,6 +281,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG APP_USER_ID=1000
 RUN if [ "$APP_USER_ID" = 0 ]; then echo "app user may not be root" && false; fi
 RUN useradd --no-log-init --home-dir /openedx --create-home --shell /bin/bash --uid ${APP_USER_ID} app
+RUN chown app /openedx
 USER ${APP_USER_ID}
 
 # Copy in backend code and requirements.
