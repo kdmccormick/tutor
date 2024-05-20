@@ -223,7 +223,7 @@ FROM frontend-requirements as requirements
 COPY --link --from=edx-platform /requirements/edx/base.txt /openedx/edx-platform/requirements/edx/base.txt
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install \
-	    -r /openedx/edx-platform/requirements/edx/base.txt \
+        -r /openedx/edx-platform/requirements/edx/base.txt \
         django-redis==5.4.0 \
         uwsgi==2.0.24 \
         'openedx-scorm-xblock>=17.0.0,<18.0.0'
@@ -311,17 +311,17 @@ COPY --chown=app:app settings/cms/*.py ./cms/envs/tutor/
 
 # Copy in frontend requirements.
 COPY --chown=app:app --from=frontend-requirements \
-	/openedx/nodeenv \
-	/openedx/nodeenv
+    /openedx/nodeenv \
+    /openedx/nodeenv
 COPY --chown=app:app --from=frontend-requirements \
-	/openedx/edx-platform/node_modules \
-	/openedx/edx-platform/node_modules
+    /openedx/edx-platform/node_modules \
+    /openedx/edx-platform/node_modules
 COPY --chown=app:app --from=frontend-requirements \
    /openedx/edx-platform/common/static/common/js/vendor \
    /openedx/edx-platform/common/static/common/js/vendor
 COPY --chown=app:app --from=frontend-requirements \
-	/openedx/edx-platform/common/static/common/css/vendor \
-	/openedx/edx-platform/common/static/common/css/vendor
+    /openedx/edx-platform/common/static/common/css/vendor \
+    /openedx/edx-platform/common/static/common/css/vendor
 RUN npm run postinstall
 
 # Copy scripts
