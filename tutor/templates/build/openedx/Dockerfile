@@ -282,12 +282,12 @@ USER ${APP_USER_ID}
 
 # Copy in backend code and requirements.
 # Dockerize tags: https://hub.docker.com/r/powerman/dockerize/tags
-COPY --link --from=docker.io/powerman/dockerize:0.19.0 /usr/local/bin/dockerize /usr/local/bin/dockerize
-COPY --link --chown=app:app --from=edx-platform / /openedx/edx-platform
-COPY --link --chown=app:app ./themes/ /openedx/themes/
-COPY --link --chown=app:app --from=python /opt/pyenv /opt/pyenv
-COPY --link --chown=app:app --from=requirements-production /openedx/venv /openedx/venv
-COPY --link --chown=app:app --from=requirements-production /mnt /mnt
+COPY --from=docker.io/powerman/dockerize:0.19.0 /usr/local/bin/dockerize /usr/local/bin/dockerize
+COPY --chown=app:app --from=edx-platform / /openedx/edx-platform
+COPY --chown=app:app ./themes/ /openedx/themes/
+COPY --chown=app:app --from=python /opt/pyenv /opt/pyenv
+COPY --chown=app:app --from=requirements-production /openedx/venv /openedx/venv
+COPY --chown=app:app --from=requirements-production /mnt /mnt
 
 WORKDIR /openedx/edx-platform
 
@@ -299,30 +299,30 @@ RUN pip install -e .
 # Create folder that will store lms/cms.env.yml files, as well as
 # the tutor-specific settings files.
 RUN mkdir -p /openedx/config ./lms/envs/tutor ./cms/envs/tutor
-COPY --link --chown=app:app revisions.yml /openedx/config/
+COPY --chown=app:app revisions.yml /openedx/config/
 ENV LMS_CFG /openedx/config/lms.env.yml
 ENV CMS_CFG /openedx/config/cms.env.yml
 ENV REVISION_CFG /openedx/config/revisions.yml
-COPY --link --chown=app:app settings/lms/*.py ./lms/envs/tutor/
-COPY --link --chown=app:app settings/cms/*.py ./cms/envs/tutor/
+COPY --chown=app:app settings/lms/*.py ./lms/envs/tutor/
+COPY --chown=app:app settings/cms/*.py ./cms/envs/tutor/
 
 # Copy in frontend requirements.
-COPY --link --chown=app:app --from=frontend-requirements \
+COPY --chown=app:app --from=frontend-requirements \
     /openedx/nodeenv \
     /openedx/nodeenv
-COPY --link --chown=app:app --from=frontend-requirements \
+COPY --chown=app:app --from=frontend-requirements \
     /openedx/edx-platform/node_modules \
     /openedx/edx-platform/node_modules
-COPY --link --chown=app:app --from=frontend-requirements \
+COPY --chown=app:app --from=frontend-requirements \
    /openedx/edx-platform/common/static/common/js/vendor \
    /openedx/edx-platform/common/static/common/js/vendor
-COPY --link --chown=app:app --from=frontend-requirements \
+COPY --chown=app:app --from=frontend-requirements \
     /openedx/edx-platform/common/static/common/css/vendor \
     /openedx/edx-platform/common/static/common/css/vendor
 RUN npm run postinstall
 
 # Copy scripts
-COPY --link --chown=app:app ./bin /openedx/bin
+COPY --chown=app:app ./bin /openedx/bin
 RUN chmod a+x /openedx/bin/*
 ENV PATH /openedx/bin:${PATH}
 
@@ -356,11 +356,11 @@ RUN ./manage.py lms --settings=tutor.i18n compilejsi18n
 RUN ./manage.py cms --settings=tutor.i18n compilejsi18n
 
 # Copy in and collect production static assets.
-COPY --link --chown=app:app --from=bundles-production /openedx/staticfiles /openedx/staticfiles
-COPY --link --chown=app:app --from=bundles-production /openedx/edx-platform/common/static/bundles common/static/bundles
-COPY --link --chown=app:app --from=css-production /openedx/edx-platform/lms/static/css lms/static/css
-COPY --link --chown=app:app --from=css-production /openedx/edx-platform/lms/static/certificates/css lms/static/certificates/css
-COPY --link --chown=app:app --from=css-production /openedx/edx-platform/cms/static/css cms/static/css
+COPY --chown=app:app --from=bundles-production /openedx/staticfiles /openedx/staticfiles
+COPY --chown=app:app --from=bundles-production /openedx/edx-platform/common/static/bundles common/static/bundles
+COPY --chown=app:app --from=css-production /openedx/edx-platform/lms/static/css lms/static/css
+COPY --chown=app:app --from=css-production /openedx/edx-platform/lms/static/certificates/css lms/static/certificates/css
+COPY --chown=app:app --from=css-production /openedx/edx-platform/cms/static/css cms/static/css
 RUN ./manage.py lms collectstatic --noinput --settings=tutor.assets
 RUN ./manage.py cms collectstatic --noinput --settings=tutor.assets
 
@@ -374,7 +374,7 @@ RUN npm run compile-sass -- --skip-themes
 RUN npm run webpack
 
 # Now that the default theme is built, build any custom themes
-COPY --link --chown=app:app ./themes/ /openedx/themes
+COPY --chown=app:app ./themes/ /openedx/themes
 RUN npm run compile-sass -- --skip-default
 
 # and finally, collect assets for the production image,
@@ -385,7 +385,7 @@ RUN ./manage.py lms collectstatic --noinput --settings=tutor.assets && \
     rdfind -makesymlinks true -followsymlinks true /openedx/staticfiles/
 
 # Copy the default uWSGI configuration
-COPY --link --chown=app:app settings/uwsgi.ini .
+COPY --chown=app:app settings/uwsgi.ini .
 
 # Default django settings
 ENV DJANGO_SETTINGS_MODULE lms.envs.tutor.production
@@ -414,20 +414,20 @@ USER app
 
 # Copy in dev python requirements.
 # (This forces us to re-install the local edx-platform repo as well.)
-COPY --link --chown=app:app --from=requirements-development /openedx/venv /openedx/venv
-COPY --link --chown=app:app --from=requirements-development /mnt /mnt
+COPY --chown=app:app --from=requirements-development /openedx/venv /openedx/venv
+COPY --chown=app:app --from=requirements-development /mnt /mnt
 RUN pip install -e .
 
 # Add ipdb as default PYTHONBREAKPOINT
 ENV PYTHONBREAKPOINT=ipdb.set_trace
 
 # In development mode, edx-platform expects the files to be in the repo, and pointed to by webpack-stats.json.
-COPY --link --chown=app:app --from=bundles-development /openedx/staticfiles/webpack-stats.json /openedx/staticfiles/webpack-stats.json
-COPY --link --chown=app:app --from=bundles-development /openedx/staticfiles/studio/webpack-stats.json /openedx/staticfiles/studio/webpack-stats.json
-COPY --link --chown=app:app --from=bundles-development /openedx/edx-platform/common/static/bundles common/static/bundles
-COPY --link --chown=app:app --from=css-development /openedx/edx-platform/lms/static/css lms/static/css
-COPY --link --chown=app:app --from=css-development /openedx/edx-platform/lms/static/certificates/css lms/static/certificates/css
-COPY --link --chown=app:app --from=css-development /openedx/edx-platform/cms/static/css cms/static/css
+COPY --chown=app:app --from=bundles-development /openedx/staticfiles/webpack-stats.json /openedx/staticfiles/webpack-stats.json
+COPY --chown=app:app --from=bundles-development /openedx/staticfiles/studio/webpack-stats.json /openedx/staticfiles/studio/webpack-stats.json
+COPY --chown=app:app --from=bundles-development /openedx/edx-platform/common/static/bundles common/static/bundles
+COPY --chown=app:app --from=css-development /openedx/edx-platform/lms/static/css lms/static/css
+COPY --chown=app:app --from=css-development /openedx/edx-platform/lms/static/certificates/css lms/static/certificates/css
+COPY --chown=app:app --from=css-development /openedx/edx-platform/cms/static/css cms/static/css
 
 {{ patch("openedx-dev-dockerfile-post-python-requirements") }}
 
