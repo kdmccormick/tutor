@@ -16,6 +16,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ENV LC_ALL en_US.UTF-8
 {{ patch("openedx-dockerfile-minimal") }}
 
+ARG PYTHON_VERSION=3.11.8
+ENV PATH /openedx/venv/bin:./node_modules/.bin:/openedx/nodeenv/bin:${PATH}
+ENV PYENV_ROOT /opt/pyenv
+ENV VIRTUAL_ENV /openedx/venv/
+ENV XDG_CACHE_HOME /openedx/.cache
+ENV COMPREHENSIVE_THEME_DIRS /openedx/themes
+ENV STATIC_ROOT_LMS /openedx/staticfiles
+ENV STATIC_ROOT_CMS /openedx/staticfiles/studio
+
 
 ###########################################################################################################################
 ############## PYTHON
@@ -29,17 +38,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt update && \
     apt install -y libssl-dev zlib1g-dev libbz2-dev \
     libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev \
-    xz-utils tk-dev libffi-dev liblzma-dev python-openssl git \
-    software-properties-common libmysqlclient-dev libxmlsec1-dev libgeos-dev
-
-ARG PYTHON_VERSION=3.11.8
-ENV PATH /openedx/venv/bin:./node_modules/.bin:/openedx/nodeenv/bin:${PATH}
-ENV PYENV_ROOT /opt/pyenv
-ENV VIRTUAL_ENV /openedx/venv/
-ENV XDG_CACHE_HOME /openedx/.cache
-ENV COMPREHENSIVE_THEME_DIRS /openedx/themes
-ENV STATIC_ROOT_LMS /openedx/staticfiles
-ENV STATIC_ROOT_CMS /openedx/staticfiles/studio
+    xz-utils tk-dev libffi-dev liblzma-dev python-openssl git
 
 # Install pyenv (https://github.com/pyenv/pyenv/releases)
 RUN git clone https://github.com/pyenv/pyenv $PYENV_ROOT --branch v2.3.36 --depth 1
@@ -268,7 +267,7 @@ RUN pip install -e "/mnt/{{ name }}"
 ###########################################################################################################################
 ############## APPLICATION (base for final production and development images)
 ###########################################################################################################################
-FROM python as application
+FROM minimal as application
 
 # Install system requirements
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -288,29 +287,14 @@ USER ${APP_USER_ID}
 # We chown with the integer APP_USER_ID rather than the 'app' username because the '--link' optimization flag tells
 # COPY to disregard filesystem changes from previous layers, including the systems' username <-> userid mapping file.
 
-# Copy in backend code and requirements.
 # Dockerize tags: https://hub.docker.com/r/powerman/dockerize/tags
 COPY --link --from=docker.io/powerman/dockerize:0.19.0 /usr/local/bin/dockerize /usr/local/bin/dockerize
-COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=edx-platform \
-	/ \
-	/openedx/edx-platform
-COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=python \
-	/opt/pyenv \
-	/opt/pyenv
-COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=requirements-production \
-	/openedx/venv \
-	/openedx/venv
-COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=requirements-production \
-	/mnt \
-	/mnt
 
-# Work out of edx-platform repo from here on out.
-WORKDIR /openedx/edx-platform
+# Copy in pyenv
+COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=python /opt/pyenv /opt/pyenv
 
-# Install the local edx-platform repo. This:
-# (1) creates an egg-info folder which is necessary to enable entrypoints like XBlocks, and
-# (2) points the virtualenv at the local edx-platform repo.
-RUN pip install -e .
+# Copy in backend code
+COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=edx-platform / /openedx/edx-platform
 
 # Copy in frontend requirements.
 COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=frontend-requirements \
@@ -326,11 +310,8 @@ COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=frontend-requirements \
     /openedx/edx-platform/common/static/common/css/vendor \
     /openedx/edx-platform/common/static/common/css/vendor
 
-# @@TODO redundant or nah?
-# edx-platform's postinstall hook copies JS modules from node_modules into edx-platform app dirs in order
-# to legacy RequireJS code. This hook was run on the frontend-requirements layer, but since we have lifted
-# only node_modules from that layer, 
-# RUN npm run postinstall
+# Work out of edx-platform repo from here on out.
+WORKDIR /openedx/edx-platform
 
 # Create folder that will store lms/cms.env.yml files, as well as
 # the tutor-specific settings files.
@@ -361,9 +342,13 @@ EXPOSE 8000
 ###########################################################################################################################
 ############## PRODUCTION
 ###########################################################################################################################
-FROM application as production
 
-# Pull latest translations via atlas
+FROM application as application-plus-production-requirements
+COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=requirements-production /openedx/venv /openedx/venv
+COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=requirements-production /mnt /mnt
+RUN pip install -e .
+
+FROM application-plus-production-requirements as locales
 RUN make clean_translations
 RUN ./manage.py lms --settings=tutor.i18n pull_plugin_translations --verbose --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
 RUN ./manage.py lms --settings=tutor.i18n pull_xblock_translations --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
@@ -376,6 +361,16 @@ RUN ./manage.py lms --settings=tutor.i18n compile_plugin_translations
 RUN ./manage.py lms --settings=tutor.i18n compilemessages -v1
 RUN ./manage.py lms --settings=tutor.i18n compilejsi18n
 RUN ./manage.py cms --settings=tutor.i18n compilejsi18n
+
+FROM application-plus-production-requirements as production
+
+# Copy in locales
+COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=locales \
+	/openedx/edx-platform/conf/locale \
+	/openedx/edx-platform/conf/locale
+COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=locales \
+	/openedx/edx-platform/conf/plugins-locale \
+	/openedx/edx-platform/conf/plugins-locale
 
 # Copy in and collect production static assets.
 COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=bundles-production \
@@ -431,13 +426,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 USER app
 
 # Copy in dev python requirements.
-# (This forces us to re-install the local edx-platform repo as well.)
-COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=requirements-development \
-    /openedx/venv \
-	/openedx/venv
-COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=requirements-development \
-    /mnt \
-	/mnt
+COPY --link --chown=${APP_USER_ID}:${APP_USER_ID} --from=requirements-development /openedx/venv /openedx/venv
 RUN pip install -e .
 
 {{ patch("openedx-dev-dockerfile-post-python-requirements") }}
