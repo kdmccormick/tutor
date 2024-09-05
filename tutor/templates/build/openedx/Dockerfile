@@ -212,18 +212,10 @@ ENV PATH=/openedx/bin:${PATH}
 
 {{ patch("openedx-dockerfile-pre-assets") }}
 
-# Build & collect production assets. By default, only assets from the default theme
-# will be processed. This makes the docker image lighter and faster to build.
-RUN npm run postinstall  # Postinstall artifacts are stuck in nodejs-requirements layer. Create them here too.
-RUN npm run compile-sass -- --skip-themes
-RUN npm run webpack
-
-# Now that the default theme is built, build any custom themes
-COPY --chown=app:app ./themes/ /openedx/themes
-RUN npm run compile-sass -- --skip-default
-
-# and finally, collect assets for the production image,
-# de-duping assets with symlinks.
+# Collect assets for the production image, de-duping assets with symlinks.
+# This includes static assets from 3rd party packages, such as Django admin.
+# If the tutor-legacyfrontends plugin is enabled, then this will also collect
+# the CSS & JS bundles produced by the edx-platform frontend build.
 RUN ./manage.py lms collectstatic --noinput --settings=tutor.assets && \
     ./manage.py cms collectstatic --noinput --settings=tutor.assets && \
     # De-duplicate static assets with symlinks \
@@ -278,13 +270,6 @@ ENV PYTHONBREAKPOINT=ipdb.set_trace
 # Point unit tests at the MongoDB container
 ENV EDXAPP_TEST_MONGO_HOST={{ MONGODB_HOST }}
 ENV EDXAPP_TEST_MONGO_PORT_NUM={{ MONGODB_PORT }}
-
-# Recompile static assets: in development mode all static assets are stored in edx-platform,
-# and the location of these files is stored in webpack-stats.json. If we don't recompile
-# static assets, then production assets will be served instead.
-RUN rm -r /openedx/staticfiles && \
-    mkdir /openedx/staticfiles && \
-    npm run build-dev
 
 {{ patch("openedx-dev-dockerfile-post-python-requirements") }}
 
