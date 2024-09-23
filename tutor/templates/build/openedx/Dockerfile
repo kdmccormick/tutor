@@ -11,6 +11,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ENV LC_ALL=en_US.UTF-8
 {{ patch("openedx-dockerfile-minimal") }}
 
+ENV PATH=/openedx/edx-platform/node_modules/.bin:/openedx/nodeenv/bin:/openedx/venv/bin:${PATH}
+ENV VIRTUAL_ENV=/openedx/venv/
+ENV XDG_CACHE_HOME=/openedx/.cache
+ENV COMPREHENSIVE_THEME_DIRS=/openedx/themes
+ENV STATIC_ROOT_LMS=/openedx/staticfiles
+ENV STATIC_ROOT_CMS=/openedx/staticfiles/studio
+
 ###### Install python with pyenv in /opt/pyenv and create virtualenv in /openedx/venv
 FROM minimal AS python
 # https://github.com/pyenv/pyenv/wiki/Common-build-problems#prerequisites
@@ -63,6 +70,7 @@ RUN git config --global user.email "tutor@overhang.io" \
 # docker build --build-context edx-platform=/path/to/edx-platform
 FROM scratch AS edx-platform
 COPY --from=code /openedx/edx-platform /
+RUN make clean  # Avoid spurious cache misses by ignoring generated files
 
 {# Create empty layers for all bind-mounted directories #}
 {% for name in iter_mounted_directories(MOUNTS, "openedx") %}
@@ -71,9 +79,6 @@ FROM scratch AS mnt-{{ name }}
 
 ###### Install python requirements in virtualenv
 FROM python AS python-requirements
-ENV PATH=/openedx/venv/bin:${PATH}
-ENV VIRTUAL_ENV=/openedx/venv/
-ENV XDG_CACHE_HOME=/openedx/.cache
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -89,8 +94,8 @@ RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     setuptools==69.1.1 pip==24.0 wheel==0.43.0
 
 # Install base requirements
-RUN --mount=type=bind,from=edx-platform,source=/requirements/edx/base.txt,target=/openedx/edx-platform/requirements/edx/base.txt \
-    --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
+COPY --link --from=edx-platform /requirements/edx/base.txt /openedx/edx-platform/requirements/edx/base.txt
+RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install -r /openedx/edx-platform/requirements/edx/base.txt
 
 # Install extra requirements
@@ -111,25 +116,80 @@ RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install '{{ extra_requirements }}'
 {% endfor %}
 
-###### Install nodejs with nodeenv in /openedx/nodeenv
-FROM python AS nodejs-requirements
-ENV PATH=/openedx/nodeenv/bin:/openedx/venv/bin:${PATH}
+###### nodejs with nodeenv in /openedx/nodeenv
+FROM python AS nodejs
 
 # Install nodeenv with the version provided by edx-platform
 # https://github.com/openedx/edx-platform/blob/master/requirements/edx/base.txt
 RUN pip install nodeenv==1.8.0
 RUN nodeenv /openedx/nodeenv --node=18.20.1 --prebuilt
 
-# Install nodejs requirements
+###### nodejs + node requirements
+FROM nodejs AS nodejs-requirements
 ARG NPM_REGISTRY={{ NPM_REGISTRY }}
 WORKDIR /openedx/edx-platform
-RUN --mount=type=bind,from=edx-platform,source=/package.json,target=/openedx/edx-platform/package.json \
-    --mount=type=bind,from=edx-platform,source=/package-lock.json,target=/openedx/edx-platform/package-lock.json \
-    --mount=type=bind,from=edx-platform,source=/scripts/copy-node-modules.sh,target=/openedx/edx-platform/scripts/copy-node-modules.sh \
-    --mount=type=cache,target=/root/.npm,sharing=shared \
+COPY --link --from=edx-platform /package.json package.json
+COPY --link --from=edx-platform /package-lock.json package-lock.json
+COPY --link --from=edx-platform /scripts/copy-node-modules.sh scripts/copy-node-modules.sh
+RUN --mount=type=cache,target=/root/.npm,sharing=shared \
     npm clean-install --no-audit --registry=$NPM_REGISTRY
 
-###### Production image with system and python requirements
+FROM nodejs-requirements AS pre-assets
+{{ patch("openedx-dockerfile-pre-assets") }}
+
+###### Minimal set of source files for webpacking JS into bundles
+# We copy the entire source tree, and then delete everything that isn't relevant.
+FROM pre-assets AS js-sources
+COPY --link --from=edx-platform / .
+RUN find . -type f -a \! \
+    \( -path 'node_modules/*' \
+    -o -path '*/static/*' \
+    -o -path '*/assets/*' \
+    -o -path '*/js/*' \
+    -o -name '*.underscore' \
+    -o -name '*.json' \
+    -o -name '*.js' \
+    -o -name '*.jsx' \
+    -o -name '.babelrc' \
+    \) -delete
+
+###### Intermediate image to capture prod JS build
+FROM pre-assets AS js-production
+COPY --link --from=js-sources /openedx/edx-platform /openedx/edx-platform
+RUN npm run webpack
+
+###### Intermediate image to capture dev JS build
+FROM pre-assets AS js-development
+COPY --link --from=js-sources /openedx/edx-platform /openedx/edx-platform
+RUN npm run webpack-dev
+
+####### Minimal set of requirements and source files for compiling Sass into CSS
+FROM pre-assets AS css-sources
+COPY --link --from=edx-platform /requirements/edx/assets.txt requirements/edx/assets.txt
+RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
+    pip install -r requirements/edx/assets.txt
+COPY --link --from=edx-platform /scripts/compile_sass.py scripts/compile_sass.py
+COPY --link --from=edx-platform /common/static common/static
+COPY --link --from=edx-platform /lms/static/sass lms/static/sass
+COPY --link --from=edx-platform /lms/static/sass/partials lms/static/sass/partials
+COPY --link --from=edx-platform /lms/static/certificates/sass lms/static/certificates/sass
+COPY --link --from=edx-platform /cms/static/sass cms/static/sass
+COPY --link --from=edx-platform /cms/static/sass/partials cms/static/sass/partials
+COPY --link --from=edx-platform /xmodule/assets xmodule/assets
+
+###### Intermediate image to capture prod (compressed) CSS build
+FROM css-sources AS css-production
+RUN npm run compile-sass -- --skip-themes
+COPY --link ./themes/ /openedx/themes
+RUN npm run compile-sass -- --skip-default
+
+###### Intermediate image to capture dev (uncompressed) CSS build
+FROM css-sources AS css-development
+RUN npm run compile-sass-dev -- --skip-themes
+COPY --link ./themes/ /openedx/themes
+RUN npm run compile-sass-dev -- --skip-default
+
+###### Intermediate image shared between final dev and prod images
 FROM minimal AS production
 
 # Install system requirements
@@ -153,29 +213,20 @@ USER ${APP_USER_ID}
 
 # https://hub.docker.com/r/powerman/dockerize/tags
 COPY --link --from=docker.io/powerman/dockerize:0.19.0 /usr/local/bin/dockerize /usr/local/bin/dockerize
+
+# Merge in python requirements and node env from intermediate images
 COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=edx-platform / /openedx/edx-platform
 COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=python /opt/pyenv /opt/pyenv
 COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=python-requirements /openedx/venv /openedx/venv
 COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=python-requirements /mnt /mnt
-COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=nodejs-requirements /openedx/nodeenv /openedx/nodeenv
-COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=nodejs-requirements /openedx/edx-platform/node_modules /openedx/node_modules
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=nodejs /openedx/nodeenv /openedx/nodeenv
 
-# Symlink node_modules such that we can bind-mount the edx-platform repository
-RUN ln -s /openedx/node_modules /openedx/edx-platform/node_modules
-
-ENV PATH=/openedx/venv/bin:./node_modules/.bin:/openedx/nodeenv/bin:${PATH}
-ENV VIRTUAL_ENV=/openedx/venv/
-ENV COMPREHENSIVE_THEME_DIRS=/openedx/themes
-ENV STATIC_ROOT_LMS=/openedx/staticfiles
-ENV STATIC_ROOT_CMS=/openedx/staticfiles/studio
+# Merge JS requirements into /openedx/assets
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=nodejs-requirements /openedx/edx-platform/common/static/common/js/vendor /openedx/assets/common/static/common/js/vendor
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=nodejs-requirements /openedx/edx-platform/common/static/common/css/vendor /openedx/assets/common/static/common/css/vendor
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=nodejs-requirements /openedx/edx-platform/node_modules /openedx/assets/node_modules
 
 WORKDIR /openedx/edx-platform
-
-{# Install auto-mounted directories as Python packages. #}
-{% for name in iter_mounted_directories(MOUNTS, "openedx") %}
-COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=mnt-{{ name }} / /mnt/{{ name }}
-RUN pip install -e "/mnt/{{ name }}"
-{% endfor %}
 
 # We install edx-platform here because it creates an egg-info folder in the current
 # repo. We need both the source code and the virtualenv to run this command.
@@ -191,53 +242,16 @@ ENV REVISION_CFG=/openedx/config/revisions.yml
 COPY --chown=app:app settings/lms/*.py ./lms/envs/tutor/
 COPY --chown=app:app settings/cms/*.py ./cms/envs/tutor/
 
-# Pull latest translations via atlas
-RUN make clean_translations
-RUN ./manage.py lms --settings=tutor.i18n pull_plugin_translations --verbose --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
-RUN ./manage.py lms --settings=tutor.i18n pull_xblock_translations --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
-RUN atlas pull --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }} \
-    translations/edx-platform/conf/locale:conf/locale \
-    translations/studio-frontend/src/i18n/messages:conf/plugins-locale/studio-frontend
-RUN ./manage.py lms --settings=tutor.i18n compile_xblock_translations
-RUN ./manage.py cms --settings=tutor.i18n compile_xblock_translations
-RUN ./manage.py lms --settings=tutor.i18n compile_plugin_translations
-RUN ./manage.py lms --settings=tutor.i18n compilemessages -v1
-RUN ./manage.py lms --settings=tutor.i18n compilejsi18n
-RUN ./manage.py cms --settings=tutor.i18n compilejsi18n
-
 # Copy scripts
 COPY --chown=app:app ./bin /openedx/bin
 RUN chmod a+x /openedx/bin/*
 ENV PATH=/openedx/bin:${PATH}
 
-{{ patch("openedx-dockerfile-pre-assets") }}
-
-# Build & collect production assets. By default, only assets from the default theme
-# will be processed. This makes the docker image lighter and faster to build.
-RUN npm run postinstall  # Postinstall artifacts are stuck in nodejs-requirements layer. Create them here too.
-RUN npm run compile-sass -- --skip-themes
-RUN npm run webpack
-
-# Now that the default theme is built, build any custom themes
-COPY --chown=app:app ./themes/ /openedx/themes
-RUN npm run compile-sass -- --skip-default
-
-# and finally, collect assets for the production image,
-# de-duping assets with symlinks.
-RUN ./manage.py lms collectstatic --noinput --settings=tutor.assets && \
-    ./manage.py cms collectstatic --noinput --settings=tutor.assets && \
-    # De-duplicate static assets with symlinks \
-    rdfind -makesymlinks true -followsymlinks true /openedx/staticfiles/
+# Create symlinks from /openedx/edx-platform to /openedx/assets. See script definition for details.
+RUN ln-assets /openedx/assets /openedx/edx-platform
 
 # Create a data directory, which might be used (or not)
 RUN mkdir /openedx/data
-
-# If this "canary" file is missing from a container, then that indicates that a
-# local edx-platform was bind-mounted into that container, thus overwriting the
-# canary. This information is useful during edx-platform initialisation.
-RUN echo \
-  "This copy of edx-platform was built into a Docker image." \
-  > bindmount-canary
 
 # service variant is "lms" or "cms"
 ENV SERVICE_VARIANT=lms
@@ -247,7 +261,7 @@ ENV DJANGO_SETTINGS_MODULE=lms.envs.tutor.production
 
 EXPOSE 8000
 
-###### Intermediate image with dev/test dependencies
+###### Image ready with development packages and uncompressed static assets
 FROM production AS development
 
 # Install useful system requirements (as root)
@@ -266,7 +280,8 @@ RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
 RUN --mount=type=cache,target=/openedx/.cache/pip,sharing=shared \
     pip install ipdb==0.13.13 ipython==8.24.0
 
-{# Re-install mounted requirements, otherwise they will be superseded by upstream reqs #}
+# Install mounted requirements
+# Must be done after installing dev requirements, so that local reqs supersede pypi reqs
 {% for name in iter_mounted_directories(MOUNTS, "openedx") %}
 COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=mnt-{{ name }} / /mnt/{{ name }}
 RUN pip install -e "/mnt/{{ name }}"
@@ -279,13 +294,6 @@ ENV PYTHONBREAKPOINT=ipdb.set_trace
 ENV EDXAPP_TEST_MONGO_HOST={{ MONGODB_HOST }}
 ENV EDXAPP_TEST_MONGO_PORT_NUM={{ MONGODB_PORT }}
 
-# Recompile static assets: in development mode all static assets are stored in edx-platform,
-# and the location of these files is stored in webpack-stats.json. If we don't recompile
-# static assets, then production assets will be served instead.
-RUN rm -r /openedx/staticfiles && \
-    mkdir /openedx/staticfiles && \
-    npm run build-dev
-
 {{ patch("openedx-dev-dockerfile-post-python-requirements") }}
 
 # Default django settings
@@ -293,8 +301,56 @@ ENV DJANGO_SETTINGS_MODULE=lms.envs.tutor.development
 
 CMD ["./manage.py", "$SERVICE_VARIANT", "runserver", "0.0.0.0:8000"]
 
-###### Final image with production cmd
+# Merge dev assets into dev image, placing edx-platform assets in /openedx/assets
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=js-development /openedx/staticfiles /openedx/staticfiles
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=js-development /openedx/edx-platform/common/static/bundles /openedx/assets/common/static/bundles
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=css-development /openedx/edx-platform/cms/static/css /openedx/assets/cms/static/css
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=css-development /openedx/edx-platform/lms/static/css /openedx/assets/lms/static/css
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=css-development /openedx/edx-platform/lms/static/certificates/css /openedx/assets/lms/static/certificates/css
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=css-development /openedx/themes /openedx/themes
+
+###### Intermediate image with translations pulled from atlas
+FROM production AS translations
+RUN make clean_translations
+RUN ./manage.py lms --settings=tutor.i18n pull_plugin_translations --verbose --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
+RUN ./manage.py lms --settings=tutor.i18n pull_xblock_translations --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
+RUN atlas pull --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }} \
+    translations/edx-platform/conf/locale:conf/locale \
+    translations/studio-frontend/src/i18n/messages:conf/plugins-locale/studio-frontend
+RUN ./manage.py lms --settings=tutor.i18n compile_xblock_translations
+RUN ./manage.py cms --settings=tutor.i18n compile_xblock_translations
+RUN ./manage.py lms --settings=tutor.i18n compile_plugin_translations
+RUN ./manage.py lms --settings=tutor.i18n compilemessages -v1
+RUN ./manage.py lms --settings=tutor.i18n compilejsi18n
+RUN ./manage.py cms --settings=tutor.i18n compilejsi18n
+
+###### Final image with production assets and command
 FROM production AS final
+
+{# Install auto-mounted directories as Python packages. #}
+{% for name in iter_mounted_directories(MOUNTS, "openedx") %}
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=mnt-{{ name }} / /mnt/{{ name }}
+RUN pip install -e "/mnt/{{ name }}"
+{% endfor %}
+
+# Merge prod assets into prod image, placing edx-platform assets in /openedx/assets
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=js-production /openedx/staticfiles /openedx/staticfiles
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=js-production /openedx/edx-platform/common/static/bundles /openedx/assets/common/static/bundles
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=css-production /openedx/edx-platform/cms/static/css /openedx/assets/cms/static/css
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=css-production /openedx/edx-platform/lms/static/css /openedx/assets/lms/static/css
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=css-production /openedx/edx-platform/lms/static/certificates/css /openedx/assets/lms/static/certificates/css
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=css-development /openedx/themes /openedx/themes
+
+# Merge translations into prod image
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=translations /openedx/edx-platform/conf/locale conf/locale
+COPY --link --chown=$APP_USER_ID:$APP_USER_ID --from=translations /openedx/edx-platform/conf/plugins-locale conf/plugins-locale
+
+# and finally, collect assets for the production image,
+# de-duping assets with symlinks.
+RUN ./manage.py lms collectstatic --noinput --settings=tutor.assets && \
+    ./manage.py cms collectstatic --noinput --settings=tutor.assets && \
+    # De-duplicate static assets with symlinks \
+    rdfind -makesymlinks true -followsymlinks true /openedx/staticfiles/
 
 # Default amount of uWSGI processes
 ENV UWSGI_WORKERS=2
