@@ -100,6 +100,9 @@ def launch(
 
     config = tutor_config.load(context.obj.root)
 
+    click.echo(fmt.title("Stopping any existing platform"))
+    context.invoke(stop)
+
     if not skip_build:
         click.echo(fmt.title("Building Docker images"))
         images_to_build = hooks.Filters.IMAGES_BUILD_REQUIRED.apply([], context_name)
@@ -107,18 +110,15 @@ def launch(
             fmt.echo_info("No image to build")
         context.invoke(images.build, image_names=images_to_build)
 
-    click.echo(fmt.title("Stopping any existing platform"))
-    context.invoke(stop)
-
     if pullimages:
         click.echo(fmt.title("Docker image updates"))
         context.invoke(dc_command, command="pull")
 
-    click.echo(fmt.title("Starting the platform in detached mode"))
-    context.invoke(start, detach=True)
-
     click.echo(fmt.title("Database creation and migrations"))
     context.invoke(do.commands["init"])
+
+    click.echo(fmt.title("Starting the platform in detached mode"))
+    context.invoke(start, detach=True)
 
     # Print the urls of the user-facing apps
     public_app_hosts = ""
