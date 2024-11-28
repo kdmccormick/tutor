@@ -195,43 +195,12 @@ ENV REVISION_CFG=/openedx/config/revisions.yml
 COPY --chown=app:app settings/lms/*.py ./lms/envs/tutor/
 COPY --chown=app:app settings/cms/*.py ./cms/envs/tutor/
 
-# Pull latest translations via atlas
-RUN make clean_translations
-RUN ./manage.py lms --settings=tutor.i18n pull_plugin_translations --verbose --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
-RUN ./manage.py lms --settings=tutor.i18n pull_xblock_translations --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
-RUN atlas pull --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }} \
-    translations/edx-platform/conf/locale:conf/locale \
-    translations/studio-frontend/src/i18n/messages:conf/plugins-locale/studio-frontend
-RUN ./manage.py lms --settings=tutor.i18n compile_xblock_translations
-RUN ./manage.py cms --settings=tutor.i18n compile_xblock_translations
-RUN ./manage.py lms --settings=tutor.i18n compile_plugin_translations
-RUN ./manage.py lms --settings=tutor.i18n compilemessages -v1
-RUN ./manage.py lms --settings=tutor.i18n compilejsi18n
-RUN ./manage.py cms --settings=tutor.i18n compilejsi18n
-
 # Copy scripts
 COPY --chown=app:app ./bin /openedx/bin
 RUN chmod a+x /openedx/bin/*
 ENV PATH=/openedx/bin:${PATH}
 
 {{ patch("openedx-dockerfile-pre-assets") }}
-
-# Build & collect production assets. By default, only assets from the default theme
-# will be processed. This makes the docker image lighter and faster to build.
-RUN npm run postinstall  # Postinstall artifacts are stuck in nodejs-requirements layer. Create them here too.
-RUN npm run compile-sass -- --skip-themes
-RUN npm run webpack
-
-# Now that the default theme is built, build any custom themes
-COPY --chown=app:app ./themes/ /openedx/themes
-RUN npm run compile-sass -- --skip-default
-
-# and finally, collect assets for the production image,
-# de-duping assets with symlinks.
-RUN ./manage.py lms collectstatic --noinput --settings=tutor.assets && \
-    ./manage.py cms collectstatic --noinput --settings=tutor.assets && \
-    # De-duplicate static assets with symlinks \
-    rdfind -makesymlinks true -followsymlinks true /openedx/staticfiles/
 
 # Create a data directory, which might be used (or not)
 RUN mkdir /openedx/data
@@ -283,13 +252,6 @@ ENV PYTHONBREAKPOINT=ipdb.set_trace
 ENV EDXAPP_TEST_MONGO_HOST={{ MONGODB_HOST }}
 ENV EDXAPP_TEST_MONGO_PORT_NUM={{ MONGODB_PORT }}
 
-# Recompile static assets: in development mode all static assets are stored in edx-platform,
-# and the location of these files is stored in webpack-stats.json. If we don't recompile
-# static assets, then production assets will be served instead.
-RUN rm -r /openedx/staticfiles && \
-    mkdir /openedx/staticfiles && \
-    npm run build-dev
-
 {{ patch("openedx-dev-dockerfile-post-python-requirements") }}
 
 # Default django settings
@@ -299,6 +261,29 @@ CMD ["./manage.py", "$SERVICE_VARIANT", "runserver", "0.0.0.0:8000"]
 
 ###### Final image with production cmd
 FROM production AS final
+
+# Pull latest translations via atlas
+RUN make clean_translations
+RUN ./manage.py lms --settings=tutor.i18n pull_plugin_translations --verbose --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
+RUN ./manage.py lms --settings=tutor.i18n pull_xblock_translations --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }}
+RUN atlas pull --repository='{{ ATLAS_REPOSITORY }}' --revision='{{ ATLAS_REVISION }}' {{ ATLAS_OPTIONS }} \
+    translations/edx-platform/conf/locale:conf/locale \
+    translations/studio-frontend/src/i18n/messages:conf/plugins-locale/studio-frontend
+RUN ./manage.py lms --settings=tutor.i18n compile_xblock_translations
+RUN ./manage.py cms --settings=tutor.i18n compile_xblock_translations
+RUN ./manage.py lms --settings=tutor.i18n compile_plugin_translations
+RUN ./manage.py lms --settings=tutor.i18n compilemessages -v1
+RUN ./manage.py lms --settings=tutor.i18n compilejsi18n
+RUN ./manage.py cms --settings=tutor.i18n compilejsi18n
+
+# Collect assets for the production image, de-duping assets with symlinks.
+# This includes static assets from 3rd party packages, such as Django admin.
+# If the tutor-legacyfrontends plugin is enabled, then this will also collect
+# the CSS & JS bundles produced by the edx-platform frontend build.
+RUN ./manage.py lms collectstatic --noinput --settings=tutor.assets && \
+    ./manage.py cms collectstatic --noinput --settings=tutor.assets && \
+    # De-duplicate static assets with symlinks \
+    rdfind -makesymlinks true -followsymlinks true /openedx/staticfiles/
 
 # Default amount of uWSGI processes
 ENV UWSGI_WORKERS=2
