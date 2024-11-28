@@ -1,0 +1,21 @@
+#!/bin/sh
+# Whenever edx-platform or installable packages (e.g., xblocks) are mounted,
+# during the image build, they are copied over to container and installed. This
+# results in egg_info generation for the mounted directories. However, the
+# egg_info is not carried over to host. When the containers are launched, the
+# host directories without egg_info are mounted on runtime and disappear from
+# pip list. To fix this, we `pip install` edx-platform and every mounted
+# package ("/mnt/*") again, re-generating the egg-infos. This script is called
+# during LMS initialization, and can also be called separately by users.
+
+set -eu
+set -x # Echo out executed lines
+
+for mounted_dir in /openedx/edx-platform /mnt/*; do
+    if [ -f $mounted_dir/setup.py ] && ! ls $mounted_dir/*.egg-info >/dev/null 2>&1 ; then
+        echo "Unable to locate egg-info in $mounted_dir -- generating now."
+        pip install -e $mounted_dir
+    fi
+done
+
+set +x
